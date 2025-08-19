@@ -23,13 +23,19 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 SECRET_KEY = 'django-insecure-z*^p5b5x+z6q+x@w18s*z^v&!1!6w!1-!z!z!z!z!z!z'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-# Setting DEBUG to False for production environment.
-DEBUG = False
+DEBUG = True
 
 # The list of hosts that Django can serve.
 # This is a security measure to prevent HTTP Host header attacks.
-# We're adding the production domain names here.
-ALLOWED_HOSTS = ['ontrac-backend.onrender.com', 'www.ontracourier.us', 'ontracourier.us']
+# We're adding the production and local domain names here.
+ALLOWED_HOSTS = [
+    'ontrac-backend.onrender.com',
+    'www.ontracourier.us',
+    'ontracourier.us',
+    'ontrac-backend-eehg.onrender.com',
+    '127.0.0.1',
+    'localhost',
+]
 
 
 # Application definition
@@ -128,11 +134,15 @@ STATIC_URL = 'static/'
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
-DEFAULT_AUTO_FIELD = 'django.db.backends.sqlite3.AutoField'
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://www.ontracourier.us",
     "https://ontracourier.us",
 ]
+import os
 
+
+# Add this line if you don't have it already
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
