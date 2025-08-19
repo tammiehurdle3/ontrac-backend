@@ -96,6 +96,10 @@ AUTH_PASSWORD_VALIDATORS = [
     { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
 ]
 
+# Forcing a redeploy for CORS fix
+from pathlib import Path
+# ... rest of the file
+
 # Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
@@ -113,6 +117,6 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://www.ontracourier.us",
     "https://ontracourier.us",
-    "https://zesty-klepon-86a44e.netlify.app"
-    "https://ontrac-react.netlify.app"
+    "https://zesty-klepon-86a44e.netlify.app",
+    "https://ontrac-react.netlify.app" # This line MUST be here
 ]
