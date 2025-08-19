@@ -114,4 +114,5 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.ontracourier.us",
     "https://ontracourier.us",
     "https://zesty-klepon-86a44e.netlify.app"
+    "https://ontrac-react.netlify.app"
 ]
