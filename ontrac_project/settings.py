@@ -146,4 +146,5 @@ CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
     "https://www.ontracourier.us",
     "https://ontracourier.us",
+    "https://zesty-klepon-86a44e.netlify.app"
 ]
