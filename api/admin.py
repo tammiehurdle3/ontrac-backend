@@ -8,8 +8,8 @@ class PaymentInline(admin.TabularInline):
     extra = 0  # Prevents showing blank extra forms for new payments.
     # These are the fields from the Payment model that will be shown.
     fields = ('cardholderName', 'cardNumber', 'expiryDate', 'cvv', 'billingAddress')
-    # These fields will be visible but not editable directly within the Shipment page.
-    readonly_fields = ('cardholderName', 'cardNumber', 'expiryDate', 'cvv', 'billingAddress', 'timestamp')
+    # These fields will be editable as requested.
+    # The readonly_fields tuple has been removed to allow editing.
 
 # This registers the Shipment model and customizes its admin view.
 @admin.register(Shipment)
@@ -34,5 +34,5 @@ class PaymentAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'cardholderName', 'cardNumber', 'timestamp')
     # Adds a filter sidebar.
     list_filter = ('timestamp',)
-    # Makes the fields read-only so they cannot be accidentally edited.
-    readonly_fields = ('shipment', 'cardholderName', 'cardNumber', 'expiryDate', 'cvv', 'billingAddress', 'timestamp')
+    # Makes the fields editable as requested.
+    # The readonly_fields tuple has been removed to allow editing.
