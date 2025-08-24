@@ -1,0 +1,16 @@
+# Local database file
+db.sqlite3
+
+# Environment variables
+.env
+
+# Virtual environment
+venv/
+__pycache__/
+*.pyc
+
+# Static files directory
+staticfiles/
+
+# Mac-specific files
+.DS_Store
