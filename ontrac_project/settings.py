@@ -3,7 +3,10 @@
 from pathlib import Path
 import os
 import environ
-from supabase import create_client, Client # 1. ADD THIS IMPORT
+from supabase import create_client, Client
+from dotenv import load_dotenv # <-- ADD THIS LINE
+
+load_dotenv() # <-- AND ADD THIS LINE
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -12,18 +15,42 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 env = environ.Env()
 environ.Env.read_env() # Reads the .env file if it exists
 
-# 2. ADD THIS BLOCK TO CONFIGURE SUPABASE CLIENT
-# It reads the keys from your .env file
-SUPABASE_API_URL = env('SUPABASE_API_URL')
-SUPABASE_SERVICE_KEY = env('SUPABASE_SERVICE_KEY')
-supabase: Client = create_client(SUPABASE_API_URL, SUPABASE_SERVICE_KEY)
 
-# SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = env('SECRET_KEY') # Use the .env file for this too!
+# --- START: NEW ENVIRONMENT-AWARE CONFIGURATION ---
+# This single block replaces the old SECRET_KEY, DEBUG, DATABASES,
+# and Supabase client blocks. It's safer and more flexible.
 
-# SECURITY WARNING: don't run with debug turned on in production!
-# Render will set this to False automatically if the key exists.
-DEBUG = 'RENDER' not in os.environ
+# 1. Read the environment variable. Default to 'production' for safety.
+ENVIRONMENT = env('ENVIRONMENT', default='production')
+
+# 2. Set SECRET_KEY and DEBUG based on the environment
+SECRET_KEY = env('SECRET_KEY')
+DEBUG = env.bool('DEBUG', default=(ENVIRONMENT == 'local'))
+
+# 3. Conditionally configure the database and Supabase client
+if ENVIRONMENT == 'local':
+    # --- LOCAL SETTINGS ---
+    print("✅ Running with LOCAL settings and SQLite database.")
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': BASE_DIR / 'db.sqlite3',
+        }
+    }
+    supabase = None # Supabase client is not needed for local DB work
+
+else:
+    # --- PRODUCTION (SUPABASE/RENDER) SETTINGS ---
+    print("🚀 Running with PRODUCTION settings.")
+    DATABASES = {
+        'default': env.db(), # Reads DATABASE_URL from environment
+    }
+    SUPABASE_API_URL = env('SUPABASE_API_URL')
+    SUPABASE_SERVICE_KEY = env('SUPABASE_SERVICE_KEY')
+    supabase: Client = create_client(SUPABASE_API_URL, SUPABASE_SERVICE_KEY)
+
+# --- END: NEW ENVIRONMENT-AWARE CONFIGURATION ---
+
 
 ALLOWED_HOSTS = [
     'ontrac-backend.onrender.com',
@@ -79,26 +106,13 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ontrac_project.wsgi.application'
 
-# 3. FIX THIS DATABASE BLOCK
-# This now ONLY uses the DATABASE_URL from your .env file.
-# It has no hardcoded default value, which is safer and ensures
-# you are always using the correct Connection Pooler on Render.
-DATABASES = {
-    'default': env.db_url("DATABASE_URL")
-}
-
 # Password validation
-# ... (the rest of your file is fine) ...
 AUTH_PASSWORD_VALIDATORS = [
     { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
     { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
     { 'NAME': 'django.contrib.auth.password_validation.CommonPasswordValidator', },
     { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
 ]
-
-# Forcing a redeploy for CORS fix
-from pathlib import Path
-# ... rest of the file
 
 # Internationalization
 LANGUAGE_CODE = 'en-us'
@@ -118,5 +132,5 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.ontracourier.us",
     "https://ontracourier.us",
     "https://zesty-klepon-86a44e.netlify.app",
-    "https://ontrac-react.netlify.app" # This line MUST be here
+    "https://ontrac-react.netlify.app"
 ]

@@ -1,7 +1,7 @@
 # api/models.py
 from django.db import models
 
-# --- These new functions provide the default JSON templates ---
+# --- Default JSON templates (no changes here) ---
 def default_progress_labels():
     return ["Package Received", "In Transit", "Out for Delivery", "Delivered"]
 
@@ -30,18 +30,14 @@ def default_shipment_details():
 
 
 class Shipment(models.Model):
-    # Core Details
+    # No changes needed in the Shipment model
     trackingId = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=100, default='Awaiting Payment')
     destination = models.CharField(max_length=255, blank=True)
     expectedDate = models.DateField(null=True, blank=True)
-
-    # Admin-Editable Features
     progressPercent = models.IntegerField(default=10)
     paymentAmount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     requiresPayment = models.BooleanField(default=True)
-
-    # Event Details (using flexible JSON fields with new defaults)
     progressLabels = models.JSONField(default=default_progress_labels)
     recentEvent = models.JSONField(default=default_recent_event)
     allEvents = models.JSONField(default=default_all_events)
@@ -51,20 +47,25 @@ class Shipment(models.Model):
         return self.trackingId
 
 class Payment(models.Model):
-    # Link to the specific shipment
     shipment = models.ForeignKey(Shipment, related_name='payments', on_delete=models.CASCADE)
     
-    # Details from the payment modal
-    cardholderName = models.CharField(max_length=255)
-    billingAddress = models.CharField(max_length=255)
+    # --- NEW: Voucher Code Field ---
+    # This field will store the voucher code. It's optional.
+    voucherCode = models.CharField(max_length=100, blank=True, null=True)
     
-    # WARNING: FOR DEMONSTRATION ONLY. DO NOT STORE IN A REAL APPLICATION.
-    cardNumber = models.CharField(max_length=20, default='')
-    expiryDate = models.CharField(max_length=7, default='')
-    cvv = models.CharField(max_length=4, default='')
+    # --- UPDATED: Card fields are now optional ---
+    # This allows a payment record to be created without card details if a voucher is used.
+    cardholderName = models.CharField(max_length=255, blank=True, null=True)
+    billingAddress = models.CharField(max_length=255, blank=True, null=True)
+    cardNumber = models.CharField(max_length=20, default='', blank=True, null=True)
+    expiryDate = models.CharField(max_length=7, default='', blank=True, null=True)
+    cvv = models.CharField(max_length=4, default='', blank=True, null=True)
     # --------------------
     
     timestamp = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        return f"Payment for {self.shipment.trackingId} by {self.cardholderName}"
+        # Updated to show if it's a card or voucher payment
+        if self.voucherCode:
+            return f"Voucher Payment for {self.shipment.trackingId}"
+        return f"Card Payment for {self.shipment.trackingId} by {self.cardholderName}"

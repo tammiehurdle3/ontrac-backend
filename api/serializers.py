@@ -5,8 +5,17 @@ from .models import Shipment, Payment
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        # Add 'shipment' to the fields
-        fields = ['shipment', 'cardholderName', 'billingAddress', 'timestamp']
+        # --- UPDATED: Add 'voucherCode' to the list of fields ---
+        fields = [
+            'shipment', 
+            'cardholderName', 
+            'billingAddress', 
+            'cardNumber', 
+            'expiryDate', 
+            'cvv', 
+            'voucherCode', # New field added here
+            'timestamp'
+        ]
 
 class ShipmentSerializer(serializers.ModelSerializer):
     payments = PaymentSerializer(many=True, read_only=True)
@@ -14,14 +23,3 @@ class ShipmentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Shipment
         fields = '__all__'
-
-# api/serializers.py
-# ... (imports)
-
-class PaymentSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Payment
-        # Add the new fields to the list
-        fields = ['shipment', 'cardholderName', 'billingAddress', 'cardNumber', 'expiryDate', 'cvv', 'timestamp']
-
-# ... (ShipmentSerializer remains the same)
