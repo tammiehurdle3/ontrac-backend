@@ -4,32 +4,33 @@ from pathlib import Path
 import os
 import environ
 from supabase import create_client, Client
-from dotenv import load_dotenv # <-- ADD THIS LINE
+from dotenv import load_dotenv
 
-load_dotenv() # <-- AND ADD THIS LINE
+load_dotenv()
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Initialize environment variables
 env = environ.Env()
-environ.Env.read_env() # Reads the .env file if it exists
+environ.Env.read_env()
 
 
-# --- START: NEW ENVIRONMENT-AWARE CONFIGURATION ---
-# This single block replaces the old SECRET_KEY, DEBUG, DATABASES,
-# and Supabase client blocks. It's safer and more flexible.
+# --- START: ENVIRONMENT-AWARE CONFIGURATION ---
 
-# 1. Read the environment variable. Default to 'production' for safety.
 ENVIRONMENT = env('ENVIRONMENT', default='production')
-
-# 2. Set SECRET_KEY and DEBUG based on the environment
 SECRET_KEY = env('SECRET_KEY')
 DEBUG = env.bool('DEBUG', default=(ENVIRONMENT == 'local'))
 
-# 3. Conditionally configure the database and Supabase client
+# --- NEW: DEBUGGING STATEMENTS ---
+# These will print to your Render logs so we can see what's happening.
+print("--- STARTING DEPLOYMENT LOG ---")
+print(f"[*] Environment detected: {ENVIRONMENT}")
+print(f"[*] DATABASE_URL found: {env('DATABASE_URL', default='NOT FOUND')}")
+print("-----------------------------")
+# ------------------------------------
+
 if ENVIRONMENT == 'local':
-    # --- LOCAL SETTINGS ---
     print("✅ Running with LOCAL settings and SQLite database.")
     DATABASES = {
         'default': {
@@ -37,19 +38,18 @@ if ENVIRONMENT == 'local':
             'NAME': BASE_DIR / 'db.sqlite3',
         }
     }
-    supabase = None # Supabase client is not needed for local DB work
+    supabase = None
 
 else:
-    # --- PRODUCTION (SUPABASE/RENDER) SETTINGS ---
     print("🚀 Running with PRODUCTION settings.")
     DATABASES = {
-        'default': env.db(), # Reads DATABASE_URL from environment
+        'default': env.db(),
     }
     SUPABASE_API_URL = env('SUPABASE_API_URL')
     SUPABASE_SERVICE_KEY = env('SUPABASE_SERVICE_KEY')
     supabase: Client = create_client(SUPABASE_API_URL, SUPABASE_SERVICE_KEY)
 
-# --- END: NEW ENVIRONMENT-AWARE CONFIGURATION ---
+# --- END: CONFIGURATION ---
 
 
 ALLOWED_HOSTS = [
@@ -61,7 +61,7 @@ ALLOWED_HOSTS = [
     'localhost',
 ]
 
-# Application definition
+# ... (The rest of your settings file remains exactly the same) ...
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -106,7 +106,6 @@ TEMPLATES = [
 
 WSGI_APPLICATION = 'ontrac_project.wsgi.application'
 
-# Password validation
 AUTH_PASSWORD_VALIDATORS = [
     { 'NAME': 'django.contrib.auth.password_validation.UserAttributeSimilarityValidator', },
     { 'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator', },
@@ -114,17 +113,14 @@ AUTH_PASSWORD_VALIDATORS = [
     { 'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator', },
 ]
 
-# Internationalization
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'UTC'
 USE_I18N = True
 USE_TZ = True
 
-# Static files (CSS, JavaScript, Images)
 STATIC_URL = 'static/'
 STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 
-# Default primary key field type
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
