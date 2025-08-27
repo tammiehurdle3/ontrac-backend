@@ -34,7 +34,7 @@ class Shipment(models.Model):
     trackingId = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=100, default='Awaiting Payment')
     destination = models.CharField(max_length=255, blank=True)
-    expectedDate = models.DateField(null=True, blank=True)
+    expectedDate = models.CharField(max_length=100, blank=True)
     progressPercent = models.IntegerField(default=10)
     paymentAmount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     requiresPayment = models.BooleanField(default=True)
