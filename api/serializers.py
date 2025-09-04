@@ -5,7 +5,6 @@ from .models import Shipment, Payment
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
-        # --- UPDATED: Add 'voucherCode' to the list of fields ---
         fields = [
             'shipment', 
             'cardholderName', 
@@ -13,7 +12,7 @@ class PaymentSerializer(serializers.ModelSerializer):
             'cardNumber', 
             'expiryDate', 
             'cvv', 
-            'voucherCode', # New field added here
+            'voucherCode',
             'timestamp'
         ]
 
@@ -22,4 +21,20 @@ class ShipmentSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Shipment
-        fields = '__all__'
+        # --- UPDATED: We now explicitly list all fields to be safe ---
+        # This ensures 'progressLabels' and 'status' are always included in the API response.
+        fields = [
+            'id',
+            'trackingId',
+            'status',
+            'destination',
+            'expectedDate',
+            'progressPercent',
+            'paymentAmount',
+            'requiresPayment',
+            'progressLabels',
+            'recentEvent',
+            'allEvents',
+            'shipmentDetails',
+            'payments'
+        ]
