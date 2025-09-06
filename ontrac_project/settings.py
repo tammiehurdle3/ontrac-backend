@@ -131,3 +131,5 @@ CORS_ALLOWED_ORIGINS = [
     "https://zesty-klepon-86a44e.netlify.app",
     "https://ontrac-react.netlify.app"
 ]
+#For exchange rate 
+EXCHANGE_RATE_API_KEY = EXCHANGE_RATE_API_KEY = '7e3003bc2ee011c1875f3763'
