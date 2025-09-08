@@ -132,14 +132,12 @@ CORS_ALLOWED_ORIGINS = [
     "https://zesty-klepon-86a44e.netlify.app",
     "https://ontrac-react.netlify.app"
 ]
-#For exchange rate 
-EXCHANGE_RATE_API_KEY = EXCHANGE_RATE_API_KEY = '7e3003bc2ee011c1875f3763'
+# --- SECURE API KEY CONFIGURATION ---
+# FIX: Safely loading keys from your .env file
+EXCHANGE_RATE_API_KEY = env('EXCHANGE_RATE_API_KEY', default='')
 
-# --- Pusher Real-Time Configuration ---
-PUSHER_APP_ID = '2047331'
-
-PUSHER_KEY = '526c08bb84e2ca83b09c'
-
-PUSHER_SECRET = 'cceefed8bc87424df364'
-
-PUSHER_CLUSTER = 'mt1'
+# FIX: Safely loading keys from your .env file
+PUSHER_APP_ID = env('PUSHER_APP_ID')
+PUSHER_KEY = env('PUSHER_KEY')
+PUSHER_SECRET = env('PUSHER_SECRET')
+PUSHER_CLUSTER = env('PUSHER_CLUSTER')
