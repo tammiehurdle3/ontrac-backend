@@ -134,3 +134,12 @@ CORS_ALLOWED_ORIGINS = [
 ]
 #For exchange rate 
 EXCHANGE_RATE_API_KEY = EXCHANGE_RATE_API_KEY = '7e3003bc2ee011c1875f3763'
+
+# --- Pusher Real-Time Configuration ---
+PUSHER_APP_ID = '2047331'
+
+PUSHER_KEY = '526c08bb84e2ca83b09c'
+
+PUSHER_SECRET = 'cceefed8bc87424df364'
+
+PUSHER_CLUSTER = 'mt1'
