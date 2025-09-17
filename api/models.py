@@ -12,6 +12,15 @@ def default_shipment_details():
     return {"service": "Ground", "weight": "0 lbs", "dimensions": "0\" x 0\" x 0\"", "originZip": "", "destinationZip": ""}
 
 class Shipment(models.Model):
+    recipient_name = models.CharField(max_length=255, blank=True, null=True, help_text="The creator's full name.")
+    recipient_email = models.EmailField(max_length=255, blank=True, null=True, help_text="The creator's email address for notifications.")
+    country = models.CharField(max_length=100, blank=True, null=True, help_text="Creator's country (e.g., USA, Canada, UK).")
+    creator_replied = models.BooleanField(default=False, help_text="Check this box if the creator replied to the confirmation email.")
+    # Checkboxes for manual email triggers
+    send_us_fee_email = models.BooleanField(default=False, help_text="Check this box to send the US shipping fee email.")
+    send_intl_tracking_email = models.BooleanField(default=False, help_text="Check this box to send the international tracking info email.")
+    send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
+
     trackingId = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=100, default='Awaiting Payment')
     destination = models.CharField(max_length=255, blank=True)
