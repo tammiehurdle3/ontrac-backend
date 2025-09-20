@@ -41,7 +41,7 @@ class SentEmailInline(admin.TabularInline):
 class ShipmentAdmin(admin.ModelAdmin):
     list_display = ('trackingId', 'status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId',)
-    inlines = [PaymentInline]
+    inlines = [PaymentInline, SentEmailInline]
     
     fieldsets = (
         (None, {'fields': ('trackingId', 'status', 'destination', 'expectedDate', 'progressPercent')}),
