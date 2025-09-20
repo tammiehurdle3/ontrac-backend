@@ -59,7 +59,8 @@ ALLOWED_HOSTS = [
     'ontrac-backend-eehg.onrender.com',
     '127.0.0.1',
     'localhost',
-    '192.168.1.246'
+    '192.168.1.246',
+    'ec5125113bcf.ngrok-free.app'
 ]
 
 # ... (The rest of your settings file remains exactly the same) ...
@@ -127,10 +128,16 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
+    "http://127.0.0.1:8001",
     "https://www.ontracourier.us",
     "https://ontracourier.us",
     "https://zesty-klepon-86a44e.netlify.app",
     "https://ontrac-react.netlify.app"
+]
+# --- START: New setting for Webhook Security ---
+# This tells Django to trust POST requests coming from your ngrok URL
+CSRF_TRUSTED_ORIGINS = [
+    'https://ec5125113bcf.ngrok-free.app'
 ]
 # --- SECURE API KEY CONFIGURATION ---
 # FIX: Safely loading keys from your .env file

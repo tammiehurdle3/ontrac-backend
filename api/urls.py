@@ -1,10 +1,9 @@
 # api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import ShipmentViewSet, PaymentCreateView
+from .views import ShipmentViewSet, PaymentCreateView, brevo_webhook # <-- THIS LINE IS NOW CORRECT
 
 # The router automatically creates the URLs for the Shipment model
-# (e.g., /api/shipments/ and /api/shipments/{trackingId}/)
 router = DefaultRouter()
 router.register(r'shipments', ShipmentViewSet, basename='shipment')
 
@@ -15,4 +14,7 @@ urlpatterns = [
     
     # Adds the specific URL for creating a new payment
     path('payments/', PaymentCreateView.as_view(), name='payment-create'),
+
+    # Adds the specific URL for the Brevo Webhook
+    path('webhooks/brevo/', brevo_webhook, name='brevo_webhook'),
 ]

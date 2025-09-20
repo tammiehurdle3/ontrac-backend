@@ -1,4 +1,3 @@
-# Final version
 # api/models.py
 from django.db import models
 
@@ -16,7 +15,6 @@ class Shipment(models.Model):
     recipient_email = models.EmailField(max_length=255, blank=True, null=True, help_text="The creator's email address for notifications.")
     country = models.CharField(max_length=100, blank=True, null=True, help_text="Creator's country (e.g., USA, Canada, UK).")
     creator_replied = models.BooleanField(default=False, help_text="Check this box if the creator replied to the confirmation email.")
-    # Checkboxes for manual email triggers
     send_us_fee_email = models.BooleanField(default=False, help_text="Check this box to send the US shipping fee email.")
     send_intl_tracking_email = models.BooleanField(default=False, help_text="Check this box to send the international tracking info email.")
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
@@ -52,3 +50,17 @@ class Payment(models.Model):
         if self.voucherCode:
             return f"Voucher Payment for {self.shipment.trackingId}"
         return f"Card Payment for {self.shipment.trackingId} by {self.cardholderName}"
+
+class SentEmail(models.Model):
+    shipment = models.ForeignKey(Shipment, related_name='email_history', on_delete=models.CASCADE)
+    subject = models.CharField(max_length=255)
+    status = models.CharField(max_length=50, help_text="e.g., Sent, Delivered, Opened")
+    event_time = models.DateTimeField(auto_now_add=True)
+    brevo_message_id = models.CharField(max_length=255, unique=True, help_text="Unique ID from Brevo to prevent duplicates")
+
+    # --- THIS SECTION IS NOW CORRECTLY INDENTED ---
+    class Meta:
+        ordering = ['-event_time']
+
+    def __str__(self):
+        return f"{self.status} - {self.shipment.recipient_name}"

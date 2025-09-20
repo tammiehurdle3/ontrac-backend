@@ -1,7 +1,7 @@
 # api/admin.py
 
 from django.contrib import admin
-from .models import Shipment, Payment
+from .models import Shipment, Payment, SentEmail
 from django.conf import settings
 import pusher
 # Import the new email service and all template IDs
@@ -25,7 +25,17 @@ class PaymentInline(admin.TabularInline):
     model = Payment
     extra = 0
     readonly_fields = ('cardholderName', 'billingAddress', 'voucherCode')
-# -----------------------------------------------------------------
+
+    # --- START: New code for Sent Email Log ---
+class SentEmailInline(admin.TabularInline):
+    model = SentEmail
+    extra = 0 # Don't show empty forms to add new logs
+    readonly_fields = ('subject', 'status', 'event_time', 'brevo_message_id')
+    can_delete = False # Prevent accidental deletion of logs
+    verbose_name_plural = "Sent Email History"
+
+    def has_add_permission(self, request, obj=None):
+        return False # Users cannot add email logs manually
 
 @admin.register(Shipment)
 class ShipmentAdmin(admin.ModelAdmin):
@@ -90,3 +100,10 @@ class ShipmentAdmin(admin.ModelAdmin):
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'cardholderName', 'voucherCode', 'timestamp')
+
+    # --- START: New code for Sent Email Log ---
+@admin.register(SentEmail)
+class SentEmailAdmin(admin.ModelAdmin):
+    list_display = ('shipment', 'subject', 'status', 'event_time')
+    list_filter = ('status', 'event_time')
+    search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId')
