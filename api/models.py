@@ -18,6 +18,7 @@ class Shipment(models.Model):
     send_us_fee_email = models.BooleanField(default=False, help_text="Check this box to send the US shipping fee email.")
     send_intl_tracking_email = models.BooleanField(default=False, help_text="Check this box to send the international tracking info email.")
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
+    send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
 
     trackingId = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=100, default='Awaiting Payment')

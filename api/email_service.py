@@ -13,6 +13,7 @@ US_FEE_NO_REPLY_ID = 6        # For: Step 2 | US Fee (No Reply version)
 INTL_TRACKING_REPLIED_ID = 4  # For: Step 2 | Intl Tracking (Replied version)
 INTL_TRACKING_NO_REPLY_ID = 7 # For: Step 2 | Intl Tracking (No Reply version)
 CUSTOMS_FEE_TEMPLATE_ID = 5     # For: Step 3 | Customs Fee Email
+STATUS_UPDATE_TEMPLATE_ID = 8
 # ----------------------------------------------------
 
 def send_transactional_email(shipment, template_id):
@@ -42,6 +43,12 @@ def send_transactional_email(shipment, template_id):
         formatted_amount = format_currency(amount, currency_code, locale='en_US')
         params["amount_due"] = formatted_amount
     # --- End of dynamic parameters ---
+    
+    if template_id == STATUS_UPDATE_TEMPLATE_ID:
+        recent_event = shipment.recentEvent
+        params['status'] = recent_event.get('status', 'Status not available')
+        params['description'] = recent_event.get('description', 'No details available.')
+        params['location'] = recent_event.get('location', '')
 
     send_smtp_email = sib_api_v3_sdk.SendSmtpEmail(
         to=[{"email": shipment.recipient_email, "name": params["creator_name"]}],
