@@ -9,6 +9,7 @@ from .email_service import (
     send_transactional_email, CONFIRMATION_TEMPLATE_ID, 
     US_FEE_REPLIED_ID, US_FEE_NO_REPLY_ID,
     INTL_TRACKING_REPLIED_ID, INTL_TRACKING_NO_REPLY_ID,
+    INTL_ARRIVED_TEMPLATE_ID,
     CUSTOMS_FEE_TEMPLATE_ID,
     STATUS_UPDATE_TEMPLATE_ID
 )
@@ -54,7 +55,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         }),
         ('Manual Email Triggers', {
             'classes': ('collapse',),
-            'fields': ('send_us_fee_email', 'send_intl_tracking_email', 'send_customs_fee_email','send_status_update_email')
+            'fields': ('send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email')
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
@@ -81,6 +82,10 @@ class ShipmentAdmin(admin.ModelAdmin):
             else:
                 send_transactional_email(obj, INTL_TRACKING_NO_REPLY_ID)
             obj.send_intl_tracking_email = False
+
+        if change and 'send_intl_arrived_email' in form.changed_data and obj.send_intl_arrived_email:
+            send_transactional_email(obj, INTL_ARRIVED_TEMPLATE_ID)
+            obj.send_intl_arrived_email = False    
             
         if change and 'send_customs_fee_email' in form.changed_data and obj.send_customs_fee_email:
             send_transactional_email(obj, CUSTOMS_FEE_TEMPLATE_ID)

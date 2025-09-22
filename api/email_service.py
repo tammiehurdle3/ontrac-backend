@@ -12,6 +12,7 @@ US_FEE_REPLIED_ID = 3         # For: Step 2 | US Fee (Replied version)
 US_FEE_NO_REPLY_ID = 6        # For: Step 2 | US Fee (No Reply version)
 INTL_TRACKING_REPLIED_ID = 4  # For: Step 2 | Intl Tracking (Replied version)
 INTL_TRACKING_NO_REPLY_ID = 7 # For: Step 2 | Intl Tracking (No Reply version)
+INTL_ARRIVED_TEMPLATE_ID = 9
 CUSTOMS_FEE_TEMPLATE_ID = 5     # For: Step 3 | Customs Fee Email
 STATUS_UPDATE_TEMPLATE_ID = 8
 # ----------------------------------------------------

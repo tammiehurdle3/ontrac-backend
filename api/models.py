@@ -18,6 +18,7 @@ class Shipment(models.Model):
     creator_replied = models.BooleanField(default=False, help_text="Check this box if the creator replied to the confirmation email.")
     send_us_fee_email = models.BooleanField(default=False, help_text="Check this box to send the US shipping fee email.")
     send_intl_tracking_email = models.BooleanField(default=False, help_text="Check this box to send the international tracking info email.")
+    send_intl_arrived_email = models.BooleanField(default=False, help_text="Check this to notify the creator their package has arrived in their country.")
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
     send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
     show_receipt = models.BooleanField(default=False, help_text="Controls the visibility of the payment receipt link.")
