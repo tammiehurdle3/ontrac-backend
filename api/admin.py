@@ -1,7 +1,7 @@
 # api/admin.py
 
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt
 from django.conf import settings
 import pusher
 # Import the new email service and all template IDs
@@ -112,3 +112,16 @@ class SentEmailAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'subject', 'status', 'event_time')
     list_filter = ('status', 'event_time')
     search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId')
+
+# NEW: Register Voucher and Receipt models
+@admin.register(Voucher)
+class VoucherAdmin(admin.ModelAdmin):
+    list_display = ('code', 'shipment', 'approved', 'created_at')
+    list_filter = ('approved', 'created_at')
+    search_fields = ('code', 'shipment__trackingId')
+
+@admin.register(Receipt)
+class ReceiptAdmin(admin.ModelAdmin):
+    list_display = ('shipment', 'is_visible', 'receipt_number', 'generated_at')
+    list_filter = ('is_visible', 'generated_at')
+    search_fields = ('shipment__trackingId', 'receipt_number')

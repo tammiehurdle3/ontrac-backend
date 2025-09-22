@@ -1,6 +1,5 @@
-# api/serializers.py
 from rest_framework import serializers
-from .models import Shipment, Payment
+from .models import Shipment, Payment, Voucher, Receipt  # NEW: Added Voucher, Receipt
 from django.conf import settings
 import requests
 
@@ -9,8 +8,33 @@ class PaymentSerializer(serializers.ModelSerializer):
         model = Payment
         fields = '__all__'
 
+# NEW: Add these two serializers
+class VoucherSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = Voucher
+        fields = ['id', 'code', 'is_valid', 'approved', 'shipment', 'created_at', 'approved_at']
+        read_only_fields = ['id', 'created_at', 'approved_at']
+
+class ReceiptSerializer(serializers.ModelSerializer):
+    shipment_tracking = serializers.CharField(source='shipment.trackingId', read_only=True)
+    recipient_name = serializers.CharField(source='shipment.recipient_name', read_only=True)
+    payment_amount = serializers.CharField(source='shipment.paymentAmount', read_only=True)
+    payment_currency = serializers.CharField(source='shipment.paymentCurrency', read_only=True)
+    
+    class Meta:
+        model = Receipt
+        fields = [
+            'id', 'shipment', 'shipment_tracking', 'recipient_name', 
+            'payment_amount', 'payment_currency', 'is_visible', 
+            'generated_at', 'approved_by', 'receipt_number'
+        ]
+        read_only_fields = ['id', 'generated_at', 'receipt_number']
+
 class ShipmentSerializer(serializers.ModelSerializer):
     payments = PaymentSerializer(many=True, read_only=True)
+    vouchers = VoucherSerializer(many=True, read_only=True)  # NEW
+    receipt = ReceiptSerializer(read_only=True)  # NEW
+    show_receipt = serializers.SerializerMethodField()  # NEW
     
     # --- BOTH custom fields are now included ---
     approximatedUSD = serializers.SerializerMethodField()
@@ -22,10 +46,17 @@ class ShipmentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'trackingId', 'status', 'destination', 'expectedDate',
             'progressPercent', 'paymentAmount', 'paymentCurrency',
-            'paymentDescription', 'requiresPayment', 'progressLabels', 
+            'paymentDescription', 'requiresPayment', 'show_receipt', 'progressLabels', 
             'recentEvent', 'allEvents', 'shipmentDetails', 'payments', 
-            'approximatedUSD', 'paymentBreakdown'
+            'vouchers', 'receipt', 'approximatedUSD', 'paymentBreakdown',
+            'recipient_name', 'recipient_email'
         ]
+        
+    # NEW: Add this method for show_receipt
+    def get_show_receipt(self, obj):
+        """Check if receipt should be visible to user"""
+        receipt = getattr(obj, 'receipt', None)
+        return receipt.is_visible if receipt else False
         
     def get_approximatedUSD(self, obj):
         # This is the currency conversion logic
