@@ -55,7 +55,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         }),
         ('Manual Email Triggers', {
             'classes': ('collapse',),
-            'fields': ('send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email')
+            'fields': ('send_confirmation_email','send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email')
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
@@ -66,8 +66,10 @@ class ShipmentAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         # --- This is the final "Smart Assistant" Logic ---
         
-        if not change:
+        if change and 'send_confirmation_email' in form.changed_data and obj.send_confirmation_email:
             send_transactional_email(obj, CONFIRMATION_TEMPLATE_ID)
+            obj.send_confirmation_email = False # Reset the checkbox after sending
+
         
         if change and 'send_us_fee_email' in form.changed_data and obj.send_us_fee_email:
             if obj.creator_replied:

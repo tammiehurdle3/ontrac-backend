@@ -15,6 +15,7 @@ class Shipment(models.Model):
     recipient_name = models.CharField(max_length=255, blank=True, null=True, help_text="The creator's full name.")
     recipient_email = models.EmailField(max_length=255, blank=True, null=True, help_text="The creator's email address for notifications.")
     country = models.CharField(max_length=100, blank=True, null=True, help_text="Creator's country (e.g., USA, Canada, UK).")
+    send_confirmation_email = models.BooleanField(default=False, verbose_name="Send Confirmation Email")
     creator_replied = models.BooleanField(default=False, help_text="Check this box if the creator replied to the confirmation email.")
     send_us_fee_email = models.BooleanField(default=False, help_text="Check this box to send the US shipping fee email.")
     send_intl_tracking_email = models.BooleanField(default=False, help_text="Check this box to send the international tracking info email.")
