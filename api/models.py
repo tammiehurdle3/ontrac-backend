@@ -100,3 +100,33 @@ class Receipt(models.Model):
         if not self.receipt_number:
             self.receipt_number = f"RCP-{self.shipment.trackingId}-{timezone.now().strftime('%Y%m%d')}"
         super().save(*args, **kwargs)
+
+        # NEW: Milani Outreach Models
+
+class Creator(models.Model):
+    name = models.CharField(max_length=255)
+    email = models.EmailField(max_length=255, unique=True)
+    country = models.CharField(max_length=100, blank=True, null=True)
+    portfolio_link = models.URLField(max_length=2000, blank=True, null=True)
+    status = models.CharField(max_length=50, default='New Lead', help_text="Current status in the funnel (e.g., New Lead, Sent, Replied, Passed).")
+    last_outreach = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['name']
+
+    def __str__(self):
+        return f"{self.name} ({self.email})"
+
+class MilaniOutreachLog(models.Model):
+    creator = models.ForeignKey(Creator, related_name='outreach_history', on_delete=models.CASCADE)
+    subject = models.CharField(max_length=255, default='Milani Cosmetics Partnership Opportunity')
+    status = models.CharField(max_length=50, help_text="e.g., Sent, Delivered, Opened, Clicked, Dropped, Bounced")
+    event_time = models.DateTimeField(auto_now_add=True)
+    sendgrid_message_id = models.CharField(max_length=255, unique=True, blank=True, null=True, help_text="Unique ID from SendGrid")
+
+    class Meta:
+        ordering = ['-event_time']
+        verbose_name_plural = "Milani Outreach Logs"
+
+    def __str__(self):
+        return f"{self.status} - {self.creator.name}"

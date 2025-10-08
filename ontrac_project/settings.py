@@ -150,3 +150,7 @@ PUSHER_SECRET = env('PUSHER_SECRET')
 PUSHER_CLUSTER = env('PUSHER_CLUSTER')
 
 BREVO_API_KEY = env('BREVO_API_KEY', default='')
+
+SENDGRID_API_KEY = env('SENDGRID_API_KEY', default='')
+# NEW: Milani Outreach Configuration
+SENDGRID_API_KEY = env('SENDGRID_API_KEY')

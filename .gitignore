@@ -14,3 +14,8 @@ staticfiles/
 
 # Mac-specific files
 .DS_Store
+
+# Database Backups (NEW)
+safe_milani_backup.sql
+*.sql
+*.dump

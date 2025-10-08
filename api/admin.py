@@ -1,7 +1,7 @@
 # api/admin.py
 
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog
 from django.conf import settings
 import pusher
 # Import the new email service and all template IDs
@@ -13,6 +13,11 @@ from .email_service import (
     CUSTOMS_FEE_TEMPLATE_ID,
     STATUS_UPDATE_TEMPLATE_ID
 )
+
+# NEW: Import Milani Service and a Management Command utility
+from .milani_email_service import send_milani_outreach_email
+from django.core.management import call_command
+from django.utils import timezone
 
 # ... (Pusher and PaymentInline code is unchanged) ...
 try:
@@ -130,3 +135,44 @@ class ReceiptAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'is_visible', 'receipt_number', 'generated_at')
     list_filter = ('is_visible', 'generated_at')
     search_fields = ('shipment__trackingId', 'receipt_number')
+
+# NEW: Milani Outreach Admin Setup
+# ---
+@admin.action(description='Send Milani Outreach Email (Individual)')
+def send_individual_outreach(modeladmin, request, queryset):
+    """Sends the email immediately to selected creators (for testing/one-offs)."""
+    count = 0
+    for creator in queryset:
+        send_milani_outreach_email(creator)
+        count += 1
+    modeladmin.message_user(request, f"Successfully triggered individual send for {count} creators.")
+    
+@admin.action(description='QUEUE Milani Outreach for Staggered Send (Bulk, Max 100)')
+def queue_bulk_outreach(modeladmin, request, queryset):
+    """Marks creators for bulk sending, which is processed by the scheduled management command."""
+    # This prevents the Admin page from hanging and delegates to the command
+    max_send = 100 # Hard limit set in the description
+    
+    creators_to_queue = queryset.filter(status__in=['New Lead', 'Passed'])[:max_send] # Only queue new leads
+    
+    # Set a simple flag or status to indicate they are queued, but we'll use a specific status
+    # to maintain high-end design, simply mark them as 'Queued'
+    creators_to_queue.update(status='Queued', last_outreach=timezone.now())
+    
+    modeladmin.message_user(request, f"Successfully queued {creators_to_queue.count()} creators for staggered outreach. They will be processed shortly.")
+
+
+@admin.register(Creator)
+class CreatorAdmin(admin.ModelAdmin):
+    list_display = ('name', 'email', 'status', 'last_outreach', 'country', 'portfolio_link')
+    list_filter = ('status', 'country')
+    search_fields = ('name', 'email', 'country')
+    actions = [send_individual_outreach, queue_bulk_outreach]
+    
+@admin.register(MilaniOutreachLog)
+class MilaniOutreachLogAdmin(admin.ModelAdmin):
+    list_display = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
+    list_filter = ('status', 'event_time')
+    search_fields = ('creator__name', 'creator__email', 'subject')
+    date_hierarchy = 'event_time'
+    readonly_fields = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')

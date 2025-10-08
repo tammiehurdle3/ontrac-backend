@@ -1,7 +1,7 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, status
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt  # NEW: Add Voucher, Receipt
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog  # NEW: Add Voucher, Receipt
 from .serializers import ShipmentSerializer, PaymentSerializer, VoucherSerializer, ReceiptSerializer  # NEW: Add VoucherSerializer, ReceiptSerializer
 from rest_framework.permissions import IsAdminUser  # NEW
 
@@ -229,3 +229,67 @@ def check_receipt_status(request, tracking_id):
             
     except Shipment.DoesNotExist:
         return Response({'error': 'Shipment not found'}, status=status.HTTP_404_NOT_FOUND)
+# NEW: Dedicated SendGrid Webhook for Milani Outreach
+@csrf_exempt
+def sendgrid_milani_webhook(request):
+    """Receives email event notifications from SendGrid for Milani outreach."""
+    if request.method == 'POST':
+        try:
+            # SendGrid often sends a list of events in one POST
+            events = json.loads(request.body)
+            
+            for data in events:
+                event = data.get('event')
+                email = data.get('email')
+                sg_message_id = data.get('sg_message_id')
+                
+                # Standardize events for your log
+                if event == 'open':
+                    status = 'Opened'
+                elif event == 'click':
+                    status = 'Clicked'
+                elif event == 'delivered':
+                    status = 'Delivered'
+                elif event == 'bounce' or event == 'dropped':
+                    status = event.capitalize()
+                elif event == 'spamreport':
+                    status = 'Reported Spam'
+                else:
+                    # Ignore other less relevant events like 'processed'
+                    continue
+
+                if not sg_message_id:
+                    continue
+
+                try:
+                    creator = Creator.objects.get(email=email)
+                    
+                    # Log entry: We update or create to avoid duplicate event logs if SendGrid retries
+                    log_entry, created = MilaniOutreachLog.objects.update_or_create(
+                        sendgrid_message_id=sg_message_id,
+                        status=status, # The status is the key to see if this event was logged
+                        defaults={
+                            'creator': creator,
+                            'subject': 'Milani Cosmetics Partnership Opportunity', # Stays constant
+                            'event_time': timezone.now()
+                        }
+                    )
+                    
+                    # Update the Creator's main status for easy Admin view
+                    if created: # Only update the main status if this is a new, important event
+                        creator.status = status 
+                        creator.save()
+                        
+                except Creator.DoesNotExist:
+                    print(f"Webhook Error: Creator not found for email {email}")
+                    pass 
+                
+            return HttpResponse(status=200)
+
+        except json.JSONDecodeError:
+            return HttpResponse(status=400)
+        except Exception as e:
+            print(f"Error processing SendGrid webhook: {e}")
+            return HttpResponse(status=500)
+
+    return HttpResponse(status=405)
