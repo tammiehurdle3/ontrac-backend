@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Shipment, Payment, Voucher, Receipt  # NEW: Added Voucher, Receipt
+from .models import Shipment, Payment, Voucher, Receipt, RefundBalance  # NEW: Added Voucher, Receipt
 from django.conf import settings
 import requests
 
@@ -30,6 +30,11 @@ class ReceiptSerializer(serializers.ModelSerializer):
         ]
         read_only_fields = ['id', 'generated_at', 'receipt_number']
 
+class RefundBalanceSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RefundBalance
+        fields = ['excess_amount_usd', 'status', 'claim_token']
+
 class ShipmentSerializer(serializers.ModelSerializer):
     payments = PaymentSerializer(many=True, read_only=True)
     vouchers = VoucherSerializer(many=True, read_only=True)  # NEW
@@ -40,6 +45,21 @@ class ShipmentSerializer(serializers.ModelSerializer):
     approximatedUSD = serializers.SerializerMethodField()
     paymentBreakdown = serializers.SerializerMethodField()
 
+    refund_balance = serializers.SerializerMethodField()
+    def get_refund_balance(self, obj):
+        """Returns the available balance linked to the recipient's email."""
+        if obj.recipient_email:
+            try:
+                # Look up the RefundBalance by recipient_email
+                balance = RefundBalance.objects.get(recipient_email=obj.recipient_email)
+                # Only return the balance if it's available to claim
+                if balance.status == 'AVAILABLE':
+                    return RefundBalanceSerializer(balance).data
+            except RefundBalance.DoesNotExist:
+                return None
+        return None
+
+
     class Meta:
         model = Shipment
         # Explicitly list all fields to ensure everything is included
@@ -49,7 +69,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
             'paymentDescription', 'requiresPayment', 'show_receipt', 'progressLabels', 
             'recentEvent', 'allEvents', 'shipmentDetails', 'payments', 
             'vouchers', 'receipt', 'approximatedUSD', 'paymentBreakdown',
-            'recipient_name', 'recipient_email'
+            'recipient_name', 'recipient_email', 'refund_balance'
         ]
         
     # NEW: Add this method for show_receipt

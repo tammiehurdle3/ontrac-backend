@@ -1,8 +1,8 @@
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, status
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog  # NEW: Add Voucher, Receipt
-from .serializers import ShipmentSerializer, PaymentSerializer, VoucherSerializer, ReceiptSerializer  # NEW: Add VoucherSerializer, ReceiptSerializer
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance  # NEW: Add Voucher, Receipt
+from .serializers import ShipmentSerializer, PaymentSerializer, VoucherSerializer, ReceiptSerializer,RefundBalanceSerializer # NEW: Add VoucherSerializer, ReceiptSerializer
 from rest_framework.permissions import IsAdminUser  # NEW
 
 import json
@@ -10,6 +10,9 @@ from django.http import HttpResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.utils import timezone
 from django.contrib.auth.models import User  # NEW
+from django.conf import settings
+import requests
+import uuid
 
 class ShipmentViewSet(viewsets.ModelViewSet):
     queryset = Shipment.objects.all()
@@ -27,6 +30,30 @@ def api_root(request, format=None):
        'shipments': '/api/shipments/',
        'payments': '/api/payments/'
     })
+
+def convert_to_usd(amount, currency):
+    """Converts a given amount from its currency to USD."""
+    if currency.upper() == 'USD':
+        return amount
+
+    try:
+        api_key = settings.EXCHANGE_RATE_API_KEY
+        if not api_key:
+            print("WARNING: EXCHANGE_RATE_API_KEY is missing. USD conversion failed.")
+            return None # Cannot convert without key
+
+        url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{currency.upper()}"
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        usd_rate = data.get('conversion_rates', {}).get('USD')
+        
+        if usd_rate:
+            return float(amount) * usd_rate
+    except (requests.RequestException, ValueError, TypeError) as e:
+        print(f"Currency conversion API error during refund calculation: {e}")
+        return None
+    return None
 
 # --- START: Corrected Webhook with Fixed Indentation ---
 @csrf_exempt
@@ -118,6 +145,8 @@ def approve_voucher(request):
     try:
         voucher_id = request.data.get('voucher_id')
         voucher = Voucher.objects.get(id=voucher_id)
+
+        balance = None
         
         # Validate voucher code (you can add your own validation logic here)
         if voucher.is_valid and not voucher.approved:
@@ -128,7 +157,25 @@ def approve_voucher(request):
             
             # Make receipt visible
             if voucher.shipment:
-                receipt, created = Receipt.objects.get_or_create(shipment=voucher.shipment)
+                VOUCHER_VALUE_USD = 100.00 
+                
+                required_fee = float(shipment.paymentAmount)
+                required_fee_usd = convert_to_usd(required_fee, shipment.paymentCurrency)
+
+                if required_fee_usd is not None and VOUCHER_VALUE_USD > required_fee_usd:
+                    excess = VOUCHER_VALUE_USD - required_fee_usd
+                    
+                    # Create or update the RefundBalance record for the creator
+                    balance, created = RefundBalance.objects.update_or_create(
+                        recipient_email=shipment.recipient_email,
+                        defaults={
+                            'excess_amount_usd': excess,
+                            'status': 'AVAILABLE',
+                            'claim_token': uuid.uuid4().hex # Generate unique token
+                        }
+                    )
+
+                receipt, created = Receipt.objects.get_or_create(shipment=shipment)
                 receipt.is_visible = True
                 receipt.approved_by = request.user
                 receipt.save()
@@ -142,7 +189,8 @@ def approve_voucher(request):
                 return Response({
                     'message': 'Voucher approved successfully',
                     'voucher': VoucherSerializer(voucher).data,
-                    'receipt': ReceiptSerializer(receipt).data
+                    'receipt': ReceiptSerializer(receipt).data,
+                    'excess_balance': RefundBalanceSerializer(balance).data if balance else None
                 })
         
         return Response({'error': 'Invalid voucher or already approved'}, status=status.HTTP_400_BAD_REQUEST)
@@ -187,6 +235,55 @@ def submit_voucher(request):
         
     except Exception as e:
         return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
+
+@api_view(['POST'])
+def submit_refund_choice(request):
+    """Endpoint for user to select refund method."""
+    token = request.data.get('claim_token')
+    method = request.data.get('refund_method') # 'CREDIT' or 'MANUAL'
+    detail = request.data.get('refund_detail', '') # PayPal email or address details
+    
+    if not token or not method:
+        return Response({'error': 'Missing required fields.'}, status=status.HTTP_400_BAD_REQUEST)
+    
+    try:
+        balance = RefundBalance.objects.get(claim_token=token, status='AVAILABLE')
+    except RefundBalance.DoesNotExist:
+        return Response({'error': 'Invalid or already claimed balance token.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if method == 'CREDIT':
+        balance.status = 'CREDIT'
+        balance.refund_method = 'Future Credit'
+        balance.save()
+        message = 'Success! Your balance has been saved as credit for future shipments.'
+    
+    elif method == 'MANUAL':
+        if not detail:
+             return Response({'error': 'Refund detail (PayPal/Card info) is required.'}, status=status.HTTP_400_BAD_REQUEST)
+             
+        balance.status = 'PROCESSING'
+        balance.refund_method = 'Manual Refund'
+        balance.refund_detail = detail
+        balance.save()
+        message = 'Success! Your refund request is now processing. Please allow 3-5 days.'
+        
+    else:
+        return Response({'error': 'Invalid refund method.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    return Response({'message': message, 'balance': RefundBalanceSerializer(balance).data})
+
+
+# --- NEW: ADD NEW ENDPOINT FOR BALANCE CHECK (Used by React) ---
+
+@api_view(['GET'])
+def check_refund_balance(request, email):
+    """Checks for an available balance linked to a given email."""
+    try:
+        balance = RefundBalance.objects.get(recipient_email=email, status='AVAILABLE')
+        return Response(RefundBalanceSerializer(balance).data)
+    except RefundBalance.DoesNotExist:
+        return Response({'excess_amount_usd': 0, 'status': 'NOT_FOUND'}, status=status.HTTP_404_NOT_FOUND)
+
 
 @api_view(['GET'])
 def check_receipt_status(request, tracking_id):
