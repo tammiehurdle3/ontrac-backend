@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import User
 from django.utils import timezone
+from django.utils.translation import gettext_lazy as _
 
 def default_progress_labels():
     return ["Package Received", "In Transit", "Out for Delivery", "Delivered"]
@@ -15,7 +16,6 @@ class Shipment(models.Model):
     recipient_name = models.CharField(max_length=255, blank=True, null=True, help_text="The creator's full name.")
     recipient_email = models.EmailField(max_length=255, blank=True, null=True, help_text="The creator's email address for notifications.")
     country = models.CharField(max_length=100, blank=True, null=True, help_text="Creator's country (e.g., USA, Canada, UK).")
-    # RESTORED: Manual trigger field for confirmation email
     send_confirmation_email = models.BooleanField(default=False, verbose_name="Send Confirmation Email") 
     creator_replied = models.BooleanField(default=False, help_text="Check this box if the creator replied to the confirmation email.")
     send_us_fee_email = models.BooleanField(default=False, help_text="Check this box to send the US shipping fee email.")
@@ -24,7 +24,6 @@ class Shipment(models.Model):
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
     send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
     show_receipt = models.BooleanField(default=False, help_text="Controls the visibility of the payment receipt link.")
-
     trackingId = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=100, default='Awaiting Payment')
     destination = models.CharField(max_length=255, blank=True)
@@ -54,7 +53,6 @@ class Payment(models.Model):
 
     def __str__(self):
         shipment_info = f"for {self.shipment.trackingId}" if self.shipment else "(Shipment Deleted)"
-
         if self.voucherCode:
             return f"Voucher Payment ({self.voucherCode}) {shipment_info}"
         return f"Card Payment by {self.cardholderName} {shipment_info}"
@@ -65,23 +63,14 @@ class SentEmail(models.Model):
     status = models.CharField(max_length=50, help_text="e.g., Sent, Delivered, Opened")
     event_time = models.DateTimeField(auto_now_add=True)
     brevo_message_id = models.CharField(max_length=255, unique=True, help_text="Unique ID from Brevo to prevent duplicates")
-
-    # --- THIS SECTION IS NOW CORRECTLY INDENTED ---
     class Meta:
         ordering = ['-event_time']
-
     def __str__(self):
-        return f"{self.status} - {self.shipment.recipient_name}"
+        return f"{self.status} - {self.shipment.recipient_name if self.shipment else 'N/A'}"
 
-# NEW: Add these at the end
 class Voucher(models.Model):
     code = models.CharField(max_length=50, unique=True)
-    value_usd = models.DecimalField(
-        max_digits=10, 
-        decimal_places=2, 
-        default=0.00, 
-        help_text="The value of the voucher in USD."
-        )
+    value_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="The value of the voucher in USD.")
     is_valid = models.BooleanField(default=True)
     used_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     shipment = models.ForeignKey(Shipment, null=True, blank=True, on_delete=models.SET_NULL, related_name='vouchers')
@@ -89,10 +78,8 @@ class Voucher(models.Model):
     approved_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL, related_name='approved_vouchers')
     created_at = models.DateTimeField(auto_now_add=True)
     approved_at = models.DateTimeField(null=True, blank=True)
-
     class Meta:
         ordering = ['-created_at']
-
     def __str__(self):
         return f"{self.code} - {'Approved' if self.approved else 'Pending'}"
 
@@ -102,16 +89,12 @@ class Receipt(models.Model):
     generated_at = models.DateTimeField(auto_now_add=True)
     approved_by = models.ForeignKey(User, null=True, blank=True, on_delete=models.SET_NULL)
     receipt_number = models.CharField(max_length=50, unique=True, blank=True, null=True)
-
     def __str__(self):
         return f"Receipt for {self.shipment.trackingId}"
-
     def save(self, *args, **kwargs):
         if not self.receipt_number:
             self.receipt_number = f"RCP-{self.shipment.trackingId}-{timezone.now().strftime('%Y%m%d')}"
         super().save(*args, **kwargs)
-
-        # NEW: Milani Outreach Models
 
 class Creator(models.Model):
     name = models.CharField(max_length=255)
@@ -120,10 +103,8 @@ class Creator(models.Model):
     portfolio_link = models.URLField(max_length=2000, blank=True, null=True)
     status = models.CharField(max_length=50, default='New Lead', help_text="Current status in the funnel (e.g., New Lead, Sent, Replied, Passed).")
     last_outreach = models.DateTimeField(null=True, blank=True)
-
     class Meta:
         ordering = ['name']
-
     def __str__(self):
         return f"{self.name} ({self.email})"
 
@@ -133,15 +114,12 @@ class MilaniOutreachLog(models.Model):
     status = models.CharField(max_length=50, help_text="e.g., Sent, Delivered, Opened, Clicked, Dropped, Bounced")
     event_time = models.DateTimeField(auto_now_add=True)
     sendgrid_message_id = models.CharField(max_length=255, unique=True, blank=True, null=True, help_text="Unique ID from SendGrid")
-
     class Meta:
         ordering = ['-event_time']
         verbose_name_plural = "Milani Outreach Logs"
-
     def __str__(self):
         return f"{self.status} - {self.creator.name}"
 
-# Utility choices for the RefundBalance status
 REFUND_STATUS_CHOICES = [
     ('AVAILABLE', 'Available for Claim'),
     ('CREDIT', 'Converted to Future Credit'),
@@ -151,17 +129,12 @@ REFUND_STATUS_CHOICES = [
 ]
 
 class RefundBalance(models.Model):
-    recipient_email = models.EmailField(max_length=255, unique=True, help_text="The creator's email, used as the unique ID for credit.")
+    recipient_email = models.EmailField(max_length=255, unique=True, help_text=_("The creator's email, used as the unique ID for credit."))
     excess_amount_usd = models.DecimalField(max_digits=10, decimal_places=2, default=0.00, help_text="Total USD credit available.")
     status = models.CharField(max_length=20, choices=REFUND_STATUS_CHOICES, default='AVAILABLE')
     last_update = models.DateTimeField(auto_now=True)
-
-    # Optional fields for manual refund request
     refund_method = models.CharField(max_length=50, blank=True, null=True)
-    refund_detail = models.CharField(max_length=255, blank=True, null=True) # PayPal email or address details
-    
-    # Simple security token for claiming the balance on the frontend
+    refund_detail = models.CharField(max_length=255, blank=True, null=True)
     claim_token = models.CharField(max_length=64, unique=True, blank=True, null=True) 
-
     def __str__(self):
         return f"Balance for {self.recipient_email} ({self.excess_amount_usd} USD)"

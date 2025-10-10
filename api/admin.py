@@ -45,7 +45,6 @@ def approve_vouchers(modeladmin, request, queryset):
                 required_fee_usd = convert_to_usd(required_fee, shipment.paymentCurrency)
 
                 if required_fee_usd is not None and voucher_value_usd > required_fee_usd:
-                    # All lines in this block now have the same, correct indentation
                     excess = voucher_value_usd - Decimal(required_fee_usd)
                     RefundBalance.objects.update_or_create(
                         recipient_email=shipment.recipient_email,
@@ -119,6 +118,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         }),
         ('Manual Email Triggers', {
             'classes': ('collapse',),
+            # --- THIS SECTION IS NOW CORRECTED ---
             'fields': ('send_confirmation_email', 'send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email') 
         }),
         ('Tracking Data (JSON)', {
@@ -128,10 +128,13 @@ class ShipmentAdmin(admin.ModelAdmin):
     )
 
     def save_model(self, request, obj, form, change):
+        # --- THIS SECTION IS NOW CORRECTED ---
+        # --- This is the final "Smart Assistant" Logic ---
+        
         if change and 'send_confirmation_email' in form.changed_data and obj.send_confirmation_email:
             send_transactional_email(obj, CONFIRMATION_TEMPLATE_ID)
-            obj.send_confirmation_email = False
-
+            obj.send_confirmation_email = False # Reset the checkbox after sending
+        
         if change and 'send_us_fee_email' in form.changed_data and obj.send_us_fee_email:
             template_id = US_FEE_REPLIED_ID if obj.creator_replied else US_FEE_NO_REPLY_ID
             send_transactional_email(obj, template_id)
@@ -181,7 +184,7 @@ class VoucherAdmin(admin.ModelAdmin):
     list_editable = ('value_usd',)
     list_filter = ('approved', 'created_at')
     search_fields = ('code', 'shipment__trackingId')
-    actions = [approve_vouchers] # This now correctly refers to the function defined above
+    actions = [approve_vouchers] 
 
 @admin.register(Receipt)
 class ReceiptAdmin(admin.ModelAdmin):
