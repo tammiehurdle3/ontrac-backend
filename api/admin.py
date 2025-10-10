@@ -104,7 +104,7 @@ class SentEmailInline(admin.TabularInline):
 
 @admin.register(Shipment)
 class ShipmentAdmin(admin.ModelAdmin):
-    list_display = ('trackingId', 'status', 'creator_replied', 'country', 'requiresPayment')
+    list_display = ('trackingId', 'recipient_name', 'status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId',)
     inlines = [PaymentInline, SentEmailInline]
     
