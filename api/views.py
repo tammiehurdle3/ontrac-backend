@@ -57,52 +57,56 @@ def convert_to_usd(amount, currency):
 
 # --- START: Corrected Webhook with Fixed Indentation ---
 @csrf_exempt
-def brevo_webhook(request):
-    if request.method == 'POST':
-        # --- THIS SECTION IS NOW CORRECTLY INDENTED ---
-        try:
-            data = json.loads(request.body)
+def mailersend_webhook(request):
+    """ Receives and processes email event notifications from MailerSend. """
+    if request.method != 'POST':
+        return HttpResponse(status=405)
 
-            event = data.get('event')
-            email = data.get('email')
-            subject = data.get('subject')
-            message_id = data.get('message-id')
+    try:
+        payload = json.loads(request.body)
+        
+        # --- CORRECTED DATA PARSING ---
+        event_type = payload.get('type', '')
+        data = payload.get('data', {})
 
-            if not message_id:
-                return HttpResponse(status=200)
-
-            if event in ['first_opening', 'unique_opened']:
-                event = 'opened'
-            
-            if event == 'click':
-                event = 'clicked'
-
-            try:
-                shipment = Shipment.objects.filter(recipient_email=email).latest('id')
-                
-                log_entry, created = SentEmail.objects.update_or_create(
-                    brevo_message_id=message_id,
-                    defaults={
-                        'shipment': shipment,
-                        'subject': subject,
-                        'status': event.capitalize(),
-                        'event_time': timezone.now()
-                    }
-                )
-
-            except Shipment.DoesNotExist:
-                pass 
-            
+        if not event_type.startswith('activity.'):
             return HttpResponse(status=200)
 
-        except json.JSONDecodeError:
-            return HttpResponse(status=400)
-        except Exception as e:
-            print(f"Error processing webhook: {e}")
-            return HttpResponse(status=500)
+        # Use the correct, simpler paths to get the data
+        message_id = data.get('message_id')
+        recipient_email = data.get('recipient')
+        subject = data.get('subject')
+        # ---------------------------------
 
-    return HttpResponse(status=405)
-# --- END: Corrected Webhook ---
+        if not message_id or not recipient_email:
+            return HttpResponse(status=200)
+
+        status_text = event_type.split('.')[-1].capitalize()
+
+        # Find the most recent shipment for this recipient to link the log entry
+        shipment = Shipment.objects.filter(recipient_email=recipient_email).latest('id')
+
+        # Create or update the log entry in your database
+        SentEmail.objects.update_or_create(
+            provider_message_id=message_id,
+            defaults={
+                'shipment': shipment,
+                'subject': subject,
+                'status': status_text,
+                'event_time': timezone.now()
+            }
+        )
+        print(f"✅ MailerSend webhook processed: Message {message_id} status is now {status_text}")
+        return HttpResponse(status=200)
+
+    except (json.JSONDecodeError, KeyError):
+        return HttpResponse(status=400) # Bad request
+    except Shipment.DoesNotExist:
+        return HttpResponse(status=200) # Can't log if no shipment, but acknowledge webhook
+    except Exception as e:
+        print(f"❌ CRITICAL: Error processing MailerSend webhook: {e}")
+        return HttpResponse(status=500)
+
 
 # NEW: Add these views at the end
 class VoucherViewSet(viewsets.ModelViewSet):

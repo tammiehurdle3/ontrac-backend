@@ -23,9 +23,10 @@ class Shipment(models.Model):
     send_intl_arrived_email = models.BooleanField(default=False, help_text="Check this to notify the creator their package has arrived in their country.")
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
     send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
+    send_customs_fee_reminder_email = models.BooleanField(default=False)
     show_receipt = models.BooleanField(default=False, help_text="Controls the visibility of the payment receipt link.")
     trackingId = models.CharField(max_length=100, unique=True)
-    status = models.CharField(max_length=100, default='Awaiting Payment')
+    status = models.CharField(max_length=100, default='Pending Payment')
     destination = models.CharField(max_length=255, blank=True)
     expectedDate = models.CharField(max_length=100, blank=True)
     progressPercent = models.IntegerField(default=10)
@@ -62,7 +63,7 @@ class SentEmail(models.Model):
     subject = models.CharField(max_length=255)
     status = models.CharField(max_length=50, help_text="e.g., Sent, Delivered, Opened")
     event_time = models.DateTimeField(auto_now_add=True)
-    brevo_message_id = models.CharField(max_length=255, unique=True, help_text="Unique ID from Brevo to prevent duplicates")
+    provider_message_id = models.CharField(max_length=255, unique=True, help_text="Unique ID from the email provider (e.g., MailerSend, SendGrid)")
     class Meta:
         ordering = ['-event_time']
     def __str__(self):

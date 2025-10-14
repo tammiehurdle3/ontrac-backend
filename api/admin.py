@@ -5,14 +5,7 @@ import pusher
 from decimal import Decimal
 
 # Import the new email service and all template IDs
-from .email_service import (
-    send_transactional_email, CONFIRMATION_TEMPLATE_ID, 
-    US_FEE_REPLIED_ID, US_FEE_NO_REPLY_ID,
-    INTL_TRACKING_REPLIED_ID, INTL_TRACKING_NO_REPLY_ID,
-    INTL_ARRIVED_TEMPLATE_ID,
-    CUSTOMS_FEE_TEMPLATE_ID,
-    STATUS_UPDATE_TEMPLATE_ID
-)
+from .email_service import send_transactional_email
 
 # NEW: Import Milani Service and a Management Command utility
 from .milani_email_service import send_milani_outreach_email
@@ -95,7 +88,7 @@ class PaymentInline(admin.TabularInline):
 class SentEmailInline(admin.TabularInline):
     model = SentEmail
     extra = 0
-    readonly_fields = ('subject', 'status', 'event_time', 'brevo_message_id')
+    readonly_fields = ('subject', 'status', 'event_time', 'provider_message_id')
     can_delete = False
     verbose_name_plural = "Sent Email History"
 
@@ -119,7 +112,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         ('Manual Email Triggers', {
             'classes': ('collapse',),
             # --- THIS SECTION IS NOW CORRECTED ---
-            'fields': ('send_confirmation_email', 'send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email') 
+            'fields': ('send_confirmation_email', 'send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email','send_customs_fee_reminder_email') 
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
@@ -128,43 +121,30 @@ class ShipmentAdmin(admin.ModelAdmin):
     )
 
     def save_model(self, request, obj, form, change):
-        # --- THIS SECTION IS NOW CORRECTED ---
-        # --- This is the final "Smart Assistant" Logic ---
-        
-        if change and 'send_confirmation_email' in form.changed_data and obj.send_confirmation_email:
-            send_transactional_email(obj, CONFIRMATION_TEMPLATE_ID)
-            obj.send_confirmation_email = False # Reset the checkbox after sending
-        
-        if change and 'send_us_fee_email' in form.changed_data and obj.send_us_fee_email:
-            template_id = US_FEE_REPLIED_ID if obj.creator_replied else US_FEE_NO_REPLY_ID
-            send_transactional_email(obj, template_id)
-            obj.send_us_fee_email = False
+        # A dictionary to map the checkbox field name to the email_type string
+        email_triggers = {
+            'send_confirmation_email': 'confirmation',
+            'send_us_fee_email': 'us_fee',
+            'send_intl_tracking_email': 'intl_tracking',
+            'send_intl_arrived_email': 'intl_arrived',
+            'send_customs_fee_email': 'customs_fee',
+            'send_status_update_email': 'status_update',
+            'send_customs_fee_reminder_email': 'customs_fee_reminder',
+        }
 
-        if change and 'send_intl_tracking_email' in form.changed_data and obj.send_intl_tracking_email:
-            template_id = INTL_TRACKING_REPLIED_ID if obj.creator_replied else INTL_TRACKING_NO_REPLY_ID
-            send_transactional_email(obj, template_id)
-            obj.send_intl_tracking_email = False
-
-        if change and 'send_intl_arrived_email' in form.changed_data and obj.send_intl_arrived_email:
-            send_transactional_email(obj, INTL_ARRIVED_TEMPLATE_ID)
-            obj.send_intl_arrived_email = False    
-            
-        if change and 'send_customs_fee_email' in form.changed_data and obj.send_customs_fee_email:
-            send_transactional_email(obj, CUSTOMS_FEE_TEMPLATE_ID)
-            obj.send_customs_fee_email = False
-
-        if change and 'send_status_update_email' in form.changed_data and obj.send_status_update_email:
-            send_transactional_email(obj, STATUS_UPDATE_TEMPLATE_ID)
-            obj.send_status_update_email = False    
-            
+        if change:
+            # Loop through the triggers to see which box was checked
+            for field_name, email_type in email_triggers.items():
+                if form.cleaned_data.get(field_name):
+                    send_transactional_email(obj, email_type)
+                    setattr(obj, field_name, False) # Reset the checkbox
+                    
         super().save_model(request, obj, form, change)
 
         if pusher_client:
             try:
                 channel_name = f'shipment-{obj.trackingId}'
-                event_name = 'update'
-                data = {'message': f'Shipment {obj.trackingId} has been updated'}
-                pusher_client.trigger(channel_name, event_name, data)
+                pusher_client.trigger(channel_name, 'update', {'message': 'Shipment updated'})
             except Exception as e:
                 print(f"CRITICAL: Error sending Pusher notification: {e}")
 

@@ -3,7 +3,7 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 from .views import (
-    ShipmentViewSet, PaymentCreateView, brevo_webhook,
+    ShipmentViewSet, PaymentCreateView, mailersend_webhook,
     VoucherViewSet, ReceiptViewSet, approve_voucher, submit_voucher, 
     check_receipt_status, sendgrid_milani_webhook, submit_refund_choice, 
     check_refund_balance
@@ -26,7 +26,7 @@ urlpatterns = [
     path('submit-voucher/', submit_voucher, name='submit-voucher'),
     path('approve-voucher/', approve_voucher, name='approve-voucher'),
     path('check-receipt/<str:tracking_id>/', check_receipt_status, name='check-receipt'),
-    path('webhooks/brevo/', brevo_webhook, name='brevo_webhook'),
+    path('webhooks/mailersend/', mailersend_webhook, name='mailersend_webhook'),
     path('webhooks/sendgrid-milani/', sendgrid_milani_webhook, name='sendgrid_milani_webhook'),
     path('submit-refund-choice/', submit_refund_choice, name='submit-refund-choice'), 
 ]

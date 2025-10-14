@@ -60,7 +60,7 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
     '192.168.1.246',
-    'ec5125113bcf.ngrok-free.app'
+    '41819d3c292b.ngrok-free.app'
 ]
 
 # ... (The rest of your settings file remains exactly the same) ...
@@ -149,6 +149,9 @@ PUSHER_KEY = env('PUSHER_KEY')
 PUSHER_SECRET = env('PUSHER_SECRET')
 PUSHER_CLUSTER = env('PUSHER_CLUSTER')
 
-BREVO_API_KEY = env('BREVO_API_KEY', default='')
+#BREVO_API_KEY = env('BREVO_API_KEY', default='')
+#MAILERSEND TO REPLACEE BREVO, TRANSACTIONAL EMAILS FOR ONTRAC
+MAILERSEND_API_KEY = env('MAILERSEND_API_KEY', default='')
 
+#MILANI INITIAL OUTREACH
 SENDGRID_API_KEY = env('SENDGRID_API_KEY', default='')
