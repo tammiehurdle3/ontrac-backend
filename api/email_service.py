@@ -88,7 +88,7 @@ def send_transactional_email(shipment, email_type: str):
 
     elif email_type == 'intl_arrived':
         subject = f"Your OnTrac Shipment has arrived in {shipment.country or 'your destination country'}"
-        heading = "Your Shipment Has Arrived in {shipment.country or 'your country'}"
+        heading = f"Your Shipment Has Arrived in {shipment.country or 'your country'}"
         main_body = f"""
             <p>Hello {creator_name},</p>
             <p>We're pleased to let you know that your shipment, tracking ID <strong>{shipment.trackingId}</strong>, has successfully arrived in {shipment.country or 'your country'}.</p>

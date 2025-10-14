@@ -45,6 +45,7 @@ else:
     DATABASES = {
         'default': env.db(),
     }
+    DATABASES['default']['CONN_MAX_AGE'] = 600
     SUPABASE_API_URL = env('SUPABASE_API_URL')
     SUPABASE_SERVICE_KEY = env('SUPABASE_SERVICE_KEY')
     supabase: Client = create_client(SUPABASE_API_URL, SUPABASE_SERVICE_KEY)
