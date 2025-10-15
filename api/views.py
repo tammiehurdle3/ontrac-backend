@@ -336,7 +336,6 @@ def sendgrid_milani_webhook(request):
     """Receives email event notifications from SendGrid for Milani outreach."""
     if request.method == 'POST':
         try:
-            # SendGrid often sends a list of events in one POST
             events = json.loads(request.body)
             
             for data in events:
@@ -344,46 +343,45 @@ def sendgrid_milani_webhook(request):
                 email = data.get('email')
                 sg_message_id = data.get('sg_message_id')
                 
-                # Standardize events for your log
-                if event == 'open':
-                    status = 'Opened'
-                elif event == 'click':
-                    status = 'Clicked'
-                elif event == 'delivered':
-                    status = 'Delivered'
-                elif event == 'bounce' or event == 'dropped':
-                    status = event.capitalize()
-                elif event == 'spamreport':
-                    status = 'Reported Spam'
-                else:
-                    # Ignore other less relevant events like 'processed'
-                    continue
+                if event == 'open': status = 'Opened'
+                elif event == 'click': status = 'Clicked'
+                elif event == 'delivered': status = 'Delivered'
+                elif event in ['bounce', 'dropped']: status = event.capitalize()
+                elif event == 'spamreport': status = 'Reported Spam'
+                else: continue
 
-                if not sg_message_id:
-                    continue
+                if not sg_message_id: continue
 
                 try:
-                    creator = Creator.objects.get(email=email)
+                    # First, try to find the existing log entry
+                    log_entry = MilaniOutreachLog.objects.get(sendgrid_message_id=sg_message_id)
                     
-                    # Log entry: We update or create to avoid duplicate event logs if SendGrid retries
-                    log_entry, created = MilaniOutreachLog.objects.update_or_create(
-                        sendgrid_message_id=sg_message_id,
-                        status=status, # The status is the key to see if this event was logged
-                        defaults={
-                            'creator': creator,
-                            'subject': 'Milani Cosmetics Partnership Opportunity', # Stays constant
-                            'event_time': timezone.now()
-                        }
-                    )
-                    
-                    # Update the Creator's main status for easy Admin view
-                    if created: # Only update the main status if this is a new, important event
-                        creator.status = status 
+                    # If found, just update its status and timestamp
+                    log_entry.status = status
+                    log_entry.event_time = timezone.now()
+                    log_entry.save()
+
+                    # Also update the main Creator status
+                    if log_entry.creator:
+                        log_entry.creator.status = status 
+                        log_entry.creator.save()
+                
+                except MilaniOutreachLog.DoesNotExist:
+                    # If the log entry does NOT exist, create it.
+                    try:
+                        creator = Creator.objects.get(email=email)
+                        MilaniOutreachLog.objects.create(
+                            creator=creator,
+                            sendgrid_message_id=sg_message_id,
+                            status=status,
+                            subject='Milani Cosmetics Partnership Opportunity'
+                        )
+                        creator.status = status
                         creator.save()
-                        
-                except Creator.DoesNotExist:
-                    print(f"Webhook Error: Creator not found for email {email}")
-                    pass 
+                    # ▼▼▼ THIS BLOCK IS NOW CORRECTLY INDENTED ▼▼▼
+                    except Creator.DoesNotExist:
+                        print(f"Webhook Error: Creator not found for email {email}")
+                        pass # Ignore if creator is not found
                 
             return HttpResponse(status=200)
 
