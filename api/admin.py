@@ -101,6 +101,7 @@ class ShipmentAdmin(admin.ModelAdmin):
     list_display = ('trackingId', 'recipient_name', 'status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId',)
     inlines = [PaymentInline, SentEmailInline]
+    list_per_page = 25
     
     fieldsets = (
         (None, {'fields': ('trackingId', 'status', 'destination', 'expectedDate', 'progressPercent')}),
@@ -152,12 +153,16 @@ class ShipmentAdmin(admin.ModelAdmin):
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'cardholderName', 'voucherCode', 'timestamp')
+    list_per_page = 50
+    list_select_related = ('shipment',)
 
 @admin.register(SentEmail)
 class SentEmailAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'subject', 'status', 'event_time')
     list_filter = ('status', 'event_time')
     search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId')
+    list_per_page = 50
+    list_select_related = ('shipment',)
 
 @admin.register(Voucher)
 class VoucherAdmin(admin.ModelAdmin):
@@ -166,12 +171,16 @@ class VoucherAdmin(admin.ModelAdmin):
     list_filter = ('approved', 'created_at')
     search_fields = ('code', 'shipment__trackingId')
     actions = [approve_vouchers] 
+    list_per_page = 50
+    list_select_related = ('shipment', 'used_by', 'approved_by')
 
 @admin.register(Receipt)
 class ReceiptAdmin(admin.ModelAdmin):
     list_display = ('shipment', 'is_visible', 'receipt_number', 'generated_at')
     list_filter = ('is_visible', 'generated_at')
     search_fields = ('shipment__trackingId', 'receipt_number')
+    list_per_page = 50
+    list_select_related = ('shipment', 'approved_by')
 
 @admin.register(RefundBalance)
 class RefundBalanceAdmin(admin.ModelAdmin):
@@ -179,7 +188,8 @@ class RefundBalanceAdmin(admin.ModelAdmin):
     search_fields = ('recipient_email',)
     list_filter = ('status', 'last_update')
     readonly_fields = ('claim_token', 'last_update')
-    
+    list_per_page = 50
+
     fieldsets = (
         ('Balance Information', {
             'fields': ('recipient_email', 'excess_amount_usd', 'status', 'last_update')
@@ -214,6 +224,7 @@ class CreatorAdmin(admin.ModelAdmin):
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
     actions = [send_individual_outreach, queue_bulk_outreach]
+    list_per_page = 50
 
     def get_queryset(self, request):
         # 1. Start by clearing the model's default .order_by('name')
@@ -253,3 +264,5 @@ class MilaniOutreachLogAdmin(admin.ModelAdmin):
     search_fields = ('creator__name', 'creator__email', 'subject')
     date_hierarchy = 'event_time'
     readonly_fields = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
+    list_per_page = 100
+    list_select_related = ('creator',)
