@@ -102,6 +102,7 @@ class ShipmentAdmin(admin.ModelAdmin):
     search_fields = ('trackingId',)
     inlines = [PaymentInline, SentEmailInline]
     list_per_page = 25
+    prefetch_related = ('payments', 'email_history')
     
     fieldsets = (
         (None, {'fields': ('trackingId', 'status', 'destination', 'expectedDate', 'progressPercent')}),
