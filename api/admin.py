@@ -13,7 +13,8 @@ from django.core.management import call_command
 from django.utils import timezone
 from .views import convert_to_usd
 import uuid
-
+from django.db.models import Case, When, Value  
+from django.utils.html import format_html
 # ===================================================================
 #  1. DEFINE THE ADMIN ACTION FUNCTION FIRST
 # ===================================================================
@@ -209,10 +210,41 @@ def queue_bulk_outreach(modeladmin, request, queryset):
 
 @admin.register(Creator)
 class CreatorAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email', 'status', 'last_outreach', 'country', 'portfolio_link')
+    list_display = ('name', 'email','colored_status', 'last_outreach', 'country', 'portfolio_link')
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
     actions = [send_individual_outreach, queue_bulk_outreach]
+
+    def get_queryset(self, request):
+        # 1. Start by clearing the model's default .order_by('name')
+        qs = super().get_queryset(request).order_by() 
+        
+        # 2. Then apply your custom sort
+        qs = qs.annotate(
+            sort_priority=Case(
+                When(status='New Lead', then=Value(1)),
+                default=Value(2)
+            )
+        )
+        return qs.order_by('sort_priority', 'name')
+
+    # --- 4. COLOR-CODING METHOD (Your second idea) ---
+    @admin.display(description='Status', ordering='sort_priority')
+    def colored_status(self, obj):
+        if obj.status == 'New Lead':
+            color = 'green'
+            text = 'NEW LEAD'
+        elif obj.status in ['Sent', 'Queued']:
+            color = 'orange'
+            text = obj.status.upper()
+        elif obj.status in ['Invalid Email', 'Dropped', 'Bounced', 'Failed']:
+            color = 'red'
+            text = obj.status.upper()
+        else:
+            color = 'inherit' # Default text color
+            text = obj.status.upper()
+            
+        return format_html('<b style="color: {};">{}</b>', color, text)    
     
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
