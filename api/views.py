@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework.decorators import api_view
 from rest_framework.response import Response
 from rest_framework import viewsets, generics, status
@@ -145,60 +146,64 @@ def approve_voucher(request):
     """Admin endpoint to approve voucher and make receipt visible"""
     if not request.user.is_authenticated or not request.user.is_staff:
         return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
-    
+
     try:
         voucher_id = request.data.get('voucher_id')
         voucher = Voucher.objects.get(id=voucher_id)
 
         balance = None
-        
-        # Validate voucher code (you can add your own validation logic here)
+
+        # Validate voucher code
         if voucher.is_valid and not voucher.approved:
             voucher.approved = True
             voucher.approved_by = request.user
             voucher.approved_at = timezone.now()
             voucher.save()
-            
+
             # Make receipt visible
             if voucher.shipment:
-                VOUCHER_VALUE_USD = 100.00 
-                
-                required_fee = float(shipment.paymentAmount)
-                required_fee_usd = convert_to_usd(required_fee, shipment.paymentCurrency)
+                # --- THIS IS THE LOGIC FIX ---
+                # It now uses your hardcoded 100.00 ONLY if the voucher's value is 0 or empty.
+                # This is much safer.
+                VOUCHER_VALUE_USD = voucher.value_usd or Decimal('100.00')
 
-                if required_fee_usd is not None and VOUCHER_VALUE_USD > required_fee_usd:
-                    excess = VOUCHER_VALUE_USD - required_fee_usd
-                    
-                    # Create or update the RefundBalance record for the creator
+                # --- THIS IS THE CRASH FIX ---
+                # Every "shipment." variable is now "voucher.shipment."
+                required_fee = float(voucher.shipment.paymentAmount)
+                required_fee_usd = convert_to_usd(required_fee, voucher.shipment.paymentCurrency)
+
+                if required_fee_usd is not None and VOUCHER_VALUE_USD > Decimal(required_fee_usd):
+                    excess = VOUCHER_VALUE_USD - Decimal(required_fee_usd)
+
                     balance, created = RefundBalance.objects.update_or_create(
-                        recipient_email=shipment.recipient_email,
+                        recipient_email=voucher.shipment.recipient_email, # <-- FIX
                         defaults={
                             'excess_amount_usd': excess,
                             'status': 'AVAILABLE',
-                            'claim_token': uuid.uuid4().hex # Generate unique token
+                            'claim_token': uuid.uuid4().hex
                         }
                     )
 
-                receipt, created = Receipt.objects.get_or_create(shipment=shipment)
+                receipt, created = Receipt.objects.get_or_create(shipment=voucher.shipment) # <-- FIX
                 receipt.is_visible = True
                 receipt.approved_by = request.user
                 receipt.save()
-                
+
                 # Update shipment status
                 voucher.shipment.status = 'Payment Confirmed'
                 voucher.shipment.progressPercent = 25
-                voucher.shipment.requiresPayment = False  # NEW: Hide payment section post-approval
+                voucher.shipment.requiresPayment = False
                 voucher.shipment.save()
-                
+
                 return Response({
                     'message': 'Voucher approved successfully',
                     'voucher': VoucherSerializer(voucher).data,
                     'receipt': ReceiptSerializer(receipt).data,
                     'excess_balance': RefundBalanceSerializer(balance).data if balance else None
                 })
-        
+
         return Response({'error': 'Invalid voucher or already approved'}, status=status.HTTP_400_BAD_REQUEST)
-        
+
     except Voucher.DoesNotExist:
         return Response({'error': 'Voucher not found'}, status=status.HTTP_404_NOT_FOUND)
 
@@ -310,79 +315,71 @@ def check_receipt_status(request, tracking_id):
     except Shipment.DoesNotExist:
         return Response({'error': 'Shipment not found'}, status=status.HTTP_404_NOT_FOUND)
 
-@api_view(['GET'])
-def check_receipt_status(request, tracking_id):
-    """Check if receipt is available for a tracking ID"""
-    try:
-        shipment = Shipment.objects.get(trackingId=tracking_id)
-        receipt = getattr(shipment, 'receipt', None)
-        
-        if receipt and receipt.is_visible:
-            return Response({
-                'available': True,
-                'receipt': ReceiptSerializer(receipt).data
-            })
-        else:
-            return Response({
-                'available': False,
-                'message': 'Receipt not yet available. Payment approval pending.'
-            })
-            
-    except Shipment.DoesNotExist:
-        return Response({'error': 'Shipment not found'}, status=status.HTTP_404_NOT_FOUND)
+
 # NEW: Dedicated SendGrid Webhook for Milani Outreach
 @csrf_exempt
 def sendgrid_milani_webhook(request):
-    """Receives email event notifications from SendGrid for Milani outreach."""
+    """
+    Receives SendGrid events and updates BOTH the log and the Creator's
+    main status field.
+    """
     if request.method == 'POST':
         try:
             events = json.loads(request.body)
             
             for data in events:
-                event = data.get('event')
+                event_type = data.get('event')
                 email = data.get('email')
                 sg_message_id = data.get('sg_message_id')
-                
-                if event == 'open': status = 'Opened'
-                elif event == 'click': status = 'Clicked'
-                elif event == 'delivered': status = 'Delivered'
-                elif event in ['bounce', 'dropped']: status = event.capitalize()
-                elif event == 'spamreport': status = 'Reported Spam'
-                else: continue
 
-                if not sg_message_id: continue
+                # Determine the status from the event
+                if event_type == 'open': status = 'Opened'
+                elif event_type == 'click': status = 'Clicked'
+                elif event_type == 'delivered': status = 'Delivered'
+                elif event_type in ['bounce', 'dropped']: status = event_type.capitalize()
+                elif event_type == 'spamreport': status = 'Reported Spam'
+                else:
+                    continue # Ignore other events like 'processed'
+
+                if not email:
+                    continue # Need an email to find the creator
 
                 try:
-                    # First, try to find the existing log entry
-                    log_entry = MilaniOutreachLog.objects.get(sendgrid_message_id=sg_message_id)
+                    # 1. Find the creator by their email
+                    creator = Creator.objects.get(email=email)
                     
-                    # If found, just update its status and timestamp
-                    log_entry.status = status
-                    log_entry.event_time = timezone.now()
-                    log_entry.save()
+                    # 2. Update the Creator's main status. This is your new workflow.
+                    creator.status = status
+                    creator.last_outreach = timezone.now()
+                    creator.save(update_fields=['status', 'last_outreach'])
 
-                    # Also update the main Creator status
-                    if log_entry.creator:
-                        log_entry.creator.status = status 
-                        log_entry.creator.save()
-                
-                except MilaniOutreachLog.DoesNotExist:
-                    # If the log entry does NOT exist, create it.
-                    try:
-                        creator = Creator.objects.get(email=email)
+                    # 3. Create or update the log for history
+                    # Set a default subject in case it's a new entry
+                    default_subject = 'Milani Cosmetics Partnership Opportunity'
+                    
+                    if sg_message_id:
+                        MilaniOutreachLog.objects.update_or_create(
+                            sendgrid_message_id=sg_message_id,
+                            defaults={
+                                'creator': creator,
+                                'status': status,
+                                'event_time': timezone.now(),
+                                'subject': default_subject
+                            }
+                        )
+                    else:
+                        # Fallback if no message ID
                         MilaniOutreachLog.objects.create(
                             creator=creator,
-                            sendgrid_message_id=sg_message_id,
                             status=status,
-                            subject='Milani Cosmetics Partnership Opportunity'
+                            event_time=timezone.now(),
+                            subject=default_subject
                         )
-                        creator.status = status
-                        creator.save()
-                    # ▼▼▼ THIS BLOCK IS NOW CORRECTLY INDENTED ▼▼▼
-                    except Creator.DoesNotExist:
-                        print(f"Webhook Error: Creator not found for email {email}")
-                        pass # Ignore if creator is not found
                 
+                except Creator.DoesNotExist:
+                    print(f"Webhook Error: Creator not found for email {email}")
+                    pass # Ignore if creator is not found
+                            
             return HttpResponse(status=200)
 
         except json.JSONDecodeError:
