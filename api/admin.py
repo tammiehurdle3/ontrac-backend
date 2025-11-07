@@ -159,6 +159,7 @@ class PaymentAdmin(admin.ModelAdmin):
 
 @admin.register(SentEmail)
 class SentEmailAdmin(admin.ModelAdmin):
+    show_full_result_count = False
     list_display = ('shipment', 'subject', 'status', 'event_time')
     list_filter = ('status', 'event_time')
     search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId')
@@ -260,6 +261,7 @@ class CreatorAdmin(admin.ModelAdmin):
     
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
+    show_full_result_count = False
     list_display = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
     list_filter = ('status', 'event_time')
     search_fields = ('creator__name', 'creator__email', 'subject')
