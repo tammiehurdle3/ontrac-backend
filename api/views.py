@@ -5,6 +5,7 @@ from rest_framework import viewsets, generics, status
 from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance  # NEW: Add Voucher, Receipt
 from .serializers import ShipmentSerializer, PaymentSerializer, VoucherSerializer, ReceiptSerializer,RefundBalanceSerializer # NEW: Add VoucherSerializer, ReceiptSerializer
 from rest_framework.permissions import IsAdminUser  # NEW
+from .email_service import send_admin_notification
 
 import json
 from django.http import HttpResponse
@@ -23,6 +24,22 @@ class ShipmentViewSet(viewsets.ModelViewSet):
 class PaymentCreateView(generics.CreateAPIView):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
+
+    def perform_create(self, serializer):
+        # First, save the payment just like it normally would
+        payment = serializer.save() 
+        
+        # Now, send your notification
+        try:
+            # Use the cardholder name in the alert
+            card_name = f" from {payment.cardholderName}" if payment.cardholderName else ""
+            send_admin_notification(
+                subject="New Payment Received",
+                message_body=f"A payment was just received{card_name} for shipment {payment.shipment.trackingId}."
+            )
+        except Exception as e:
+            # Don't crash the main API request if email fails
+            print(f"Admin notification failed to send: {e}")
 
 @api_view(['GET'])
 def api_root(request, format=None):
@@ -55,6 +72,7 @@ def convert_to_usd(amount, currency):
         print(f"Currency conversion API error during refund calculation: {e}")
         return None
     return None
+
 
 # --- START: Corrected Webhook with Fixed Indentation ---
 @csrf_exempt
@@ -232,6 +250,15 @@ def submit_voucher(request):
             code=code,
             shipment=shipment
         )
+
+        try:
+            send_admin_notification(
+                subject="New Voucher Submitted", 
+                message_body=f"A new voucher '{code}' was just submitted for shipment {shipment.trackingId}. Please log in to approve it."
+            )
+        except Exception as e:
+            # Don't crash the main API request if email fails
+            print(f"Admin notification failed to send: {e}")
         
         # Create receipt if it doesn't exist
         Receipt.objects.get_or_create(shipment=shipment)

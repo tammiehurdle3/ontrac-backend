@@ -214,3 +214,43 @@ def send_transactional_email(shipment, email_type: str):
     except Exception as e:
         print(f"❌ CRITICAL: Exception during email send: {e}\n")
 
+
+def send_admin_notification(subject, message_body):
+    """
+    Sends a simple, plain-text email to the site admin.
+    """
+    # --- !!! SET YOUR PERSONAL EMAIL HERE !!! ---
+    ADMIN_EMAIL = "smthpines@gmail.com"
+    # -------------------------------------------
+    
+    if not ADMIN_EMAIL:
+        print("CRITICAL: No ADMIN_EMAIL set for notification.")
+        return
+
+    try:
+        api_key = settings.MAILERSEND_API_KEY
+        mailer = MailerSendClient(api_key)
+
+        # Create a simple text-based email
+        final_html = f"""
+        <html><body>
+        <p>This is an automated admin alert.</p>
+        <p>{message_body}</p>
+        </body></html>
+        """
+        
+        # Use the existing Pydantic models defined at the top of this file
+        mail_params = {
+            "from": {"email": MAILERSEND_SENDER_EMAIL, "name": "OnTrac Admin Bot"},
+            "to": [{"email": ADMIN_EMAIL, "name": "Site Admin"}],
+            "subject": f"[Admin Alert] - {subject}",
+            "html": final_html,
+        }
+        
+        email_object = CustomEmailParams(**mail_params)
+        mailer.emails.send(email_object)
+        print(f"✅ Admin notification sent: '{subject}'")
+
+    except Exception as e:
+        print(f"❌ CRITICAL: Failed to send admin notification: {e}")
+
