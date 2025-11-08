@@ -156,3 +156,15 @@ MAILERSEND_API_KEY = env('MAILERSEND_API_KEY', default='')
 
 #MILANI INITIAL OUTREACH
 SENDGRID_API_KEY = env('SENDGRID_API_KEY', default='')
+
+# --- DJANGO CACHE CONFIGURATION ---
+# This tells Django to use your Render Redis as its cache
+CACHES = {
+    "default": {
+        "BACKEND": "django_redis.cache.RedisCache",
+        "LOCATION": env('REDIS_URL', default='redis://localhost:6379/1'),
+        "OPTIONS": {
+            "CLIENT_CLASS": "django_redis.client.DefaultClient",
+        }
+    }
+}

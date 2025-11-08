@@ -228,21 +228,8 @@ class CreatorAdmin(admin.ModelAdmin):
     actions = [send_individual_outreach, queue_bulk_outreach]
     list_per_page = 50
 
-    def get_queryset(self, request):
-        # 1. Start by clearing the model's default .order_by('name')
-        qs = super().get_queryset(request).order_by() 
-        
-        # 2. Then apply your custom sort
-        qs = qs.annotate(
-            sort_priority=Case(
-                When(status='New Lead', then=Value(1)),
-                default=Value(2)
-            )
-        )
-        return qs.order_by('sort_priority', 'name')
-
     # --- 4. COLOR-CODING METHOD (Your second idea) ---
-    @admin.display(description='Status', ordering='sort_priority')
+    @admin.display(description='Status', ordering='status')
     def colored_status(self, obj):
         if obj.status == 'New Lead':
             color = 'green'

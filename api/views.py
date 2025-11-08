@@ -354,30 +354,30 @@ def sendgrid_milani_webhook(request):
     if request.method == 'POST':
         try:
             events = json.loads(request.body)
-            
+
             # STEP 1: Deduplicate events (if same email has multiple events, keep most important)
             unique_events = {}
             for data in events:
                 email = data.get('email')
                 event_type = data.get('event')
-                
+
                 if email:
                     # Priority: clicked > opened > delivered > bounce/dropped
                     priority = {'click': 4, 'open': 3, 'delivered': 2, 'bounce': 1, 'dropped': 1, 'spamreport': 1}
                     current_priority = priority.get(event_type, 0)
-                    
+
                     if email not in unique_events or priority.get(unique_events[email].get('event'), 0) < current_priority:
                         unique_events[email] = data
-            
+
             # STEP 2: Fetch ALL creators at once (1 database query instead of 100)
             emails = list(unique_events.keys())
             creators_dict = {c.email: c for c in Creator.objects.filter(email__in=emails)}
-            
+
             # STEP 3: Process all updates in one transaction
             with transaction.atomic():
                 logs_to_create = []
                 creators_to_update = []
-                
+
                 for email, data in unique_events.items():
                     event_type = data.get('event')
                     sg_message_id = data.get('sg_message_id')
@@ -399,18 +399,18 @@ def sendgrid_milani_webhook(request):
                     creator = creators_dict.get(email)
                     if not creator:
                         continue
-                    
+
                     # Cache check: Don't process duplicate within 60 seconds
                     cache_key = f"webhook_{email}_{status}"
                     if cache.get(cache_key):
                         continue
                     cache.set(cache_key, True, 60)
-                    
+
                     # Prepare creator for update
                     creator.status = status
                     creator.last_outreach = timezone.now()
                     creators_to_update.append(creator)
-                    
+
                     # Prepare log entry
                     if sg_message_id:
                         if not MilaniOutreachLog.objects.filter(sendgrid_message_id=sg_message_id).exists():
@@ -428,14 +428,14 @@ def sendgrid_milani_webhook(request):
                             event_time=timezone.now(),
                             subject='Milani Cosmetics Partnership Opportunity'
                         ))
-                
+
                 # STEP 4: Bulk update/create (1 query for all creators, 1 for all logs)
                 if creators_to_update:
                     Creator.objects.bulk_update(creators_to_update, ['status', 'last_outreach'])
-                
+
                 if logs_to_create:
                     MilaniOutreachLog.objects.bulk_create(logs_to_create, ignore_conflicts=True)
-            
+
             print(f"✅ Webhook processed {len(unique_events)} events")
             return HttpResponse(status=200)
 
