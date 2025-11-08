@@ -56,12 +56,6 @@ def send_milani_outreach_email(creator: Creator):
             # The message ID is found in the headers, essential for webhook matching
             message_id = response.headers.get('X-Message-Id')
             
-            # 1. Log the initial 'Sent' status
-            MilaniOutreachLog.objects.create(
-                creator=creator,
-                status='Sent',
-                sendgrid_message_id=message_id
-            )
             
             # 2. Update the Creator's status
             creator.status = 'Sent'

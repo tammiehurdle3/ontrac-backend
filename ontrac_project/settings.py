@@ -75,6 +75,7 @@ INSTALLED_APPS = [
     'api',
     'rest_framework',
     'corsheaders',
+    'django_redis',
 ]
 
 MIDDLEWARE = [
