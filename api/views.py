@@ -6,6 +6,8 @@ from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, Mil
 from .serializers import ShipmentSerializer, PaymentSerializer, VoucherSerializer, ReceiptSerializer,RefundBalanceSerializer # NEW: Add VoucherSerializer, ReceiptSerializer
 from rest_framework.permissions import IsAdminUser  # NEW
 from .email_service import send_admin_notification
+from django.db import transaction
+from django.core.cache import cache
 
 import json
 from django.http import HttpResponse
@@ -347,72 +349,102 @@ def check_receipt_status(request, tracking_id):
 @csrf_exempt
 def sendgrid_milani_webhook(request):
     """
-    Receives SendGrid events and updates BOTH the log and the Creator's
-    main status field.
+    Optimized webhook that processes events in bulk to prevent database overload.
     """
     if request.method == 'POST':
         try:
             events = json.loads(request.body)
             
+            # STEP 1: Deduplicate events (if same email has multiple events, keep most important)
+            unique_events = {}
             for data in events:
-                event_type = data.get('event')
                 email = data.get('email')
-                sg_message_id = data.get('sg_message_id')
-
-                # Determine the status from the event
-                if event_type == 'open': status = 'Opened'
-                elif event_type == 'click': status = 'Clicked'
-                elif event_type == 'delivered': status = 'Delivered'
-                elif event_type in ['bounce', 'dropped']: status = event_type.capitalize()
-                elif event_type == 'spamreport': status = 'Reported Spam'
-                else:
-                    continue # Ignore other events like 'processed'
-
-                if not email:
-                    continue # Need an email to find the creator
-
-                try:
-                    # 1. Find the creator by their email
-                    creator = Creator.objects.get(email=email)
+                event_type = data.get('event')
+                
+                if email:
+                    # Priority: clicked > opened > delivered > bounce/dropped
+                    priority = {'click': 4, 'open': 3, 'delivered': 2, 'bounce': 1, 'dropped': 1, 'spamreport': 1}
+                    current_priority = priority.get(event_type, 0)
                     
-                    # 2. Update the Creator's main status. This is your new workflow.
+                    if email not in unique_events or priority.get(unique_events[email].get('event'), 0) < current_priority:
+                        unique_events[email] = data
+            
+            # STEP 2: Fetch ALL creators at once (1 database query instead of 100)
+            emails = list(unique_events.keys())
+            creators_dict = {c.email: c for c in Creator.objects.filter(email__in=emails)}
+            
+            # STEP 3: Process all updates in one transaction
+            with transaction.atomic():
+                logs_to_create = []
+                creators_to_update = []
+                
+                for email, data in unique_events.items():
+                    event_type = data.get('event')
+                    sg_message_id = data.get('sg_message_id')
+
+                    # Convert event to status
+                    if event_type == 'open': 
+                        status = 'Opened'
+                    elif event_type == 'click': 
+                        status = 'Clicked'
+                    elif event_type == 'delivered': 
+                        status = 'Delivered'
+                    elif event_type in ['bounce', 'dropped']: 
+                        status = event_type.capitalize()
+                    elif event_type == 'spamreport': 
+                        status = 'Reported Spam'
+                    else:
+                        continue
+
+                    creator = creators_dict.get(email)
+                    if not creator:
+                        continue
+                    
+                    # Cache check: Don't process duplicate within 60 seconds
+                    cache_key = f"webhook_{email}_{status}"
+                    if cache.get(cache_key):
+                        continue
+                    cache.set(cache_key, True, 60)
+                    
+                    # Prepare creator for update
                     creator.status = status
                     creator.last_outreach = timezone.now()
-                    creator.save(update_fields=['status', 'last_outreach'])
-
-                    # 3. Create or update the log for history
-                    # Set a default subject in case it's a new entry
-                    default_subject = 'Milani Cosmetics Partnership Opportunity'
+                    creators_to_update.append(creator)
                     
+                    # Prepare log entry
                     if sg_message_id:
-                        MilaniOutreachLog.objects.update_or_create(
-                            sendgrid_message_id=sg_message_id,
-                            defaults={
-                                'creator': creator,
-                                'status': status,
-                                'event_time': timezone.now(),
-                                'subject': default_subject
-                            }
-                        )
+                        if not MilaniOutreachLog.objects.filter(sendgrid_message_id=sg_message_id).exists():
+                            logs_to_create.append(MilaniOutreachLog(
+                                creator=creator,
+                                status=status,
+                                event_time=timezone.now(),
+                                subject='Milani Cosmetics Partnership Opportunity',
+                                sendgrid_message_id=sg_message_id
+                            ))
                     else:
-                        # Fallback if no message ID
-                        MilaniOutreachLog.objects.create(
+                        logs_to_create.append(MilaniOutreachLog(
                             creator=creator,
                             status=status,
                             event_time=timezone.now(),
-                            subject=default_subject
-                        )
+                            subject='Milani Cosmetics Partnership Opportunity'
+                        ))
                 
-                except Creator.DoesNotExist:
-                    print(f"Webhook Error: Creator not found for email {email}")
-                    pass # Ignore if creator is not found
-                            
+                # STEP 4: Bulk update/create (1 query for all creators, 1 for all logs)
+                if creators_to_update:
+                    Creator.objects.bulk_update(creators_to_update, ['status', 'last_outreach'])
+                
+                if logs_to_create:
+                    MilaniOutreachLog.objects.bulk_create(logs_to_create, ignore_conflicts=True)
+            
+            print(f"✅ Webhook processed {len(unique_events)} events")
             return HttpResponse(status=200)
 
         except json.JSONDecodeError:
             return HttpResponse(status=400)
         except Exception as e:
-            print(f"Error processing SendGrid webhook: {e}")
+            print(f"❌ Webhook error: {e}")
+            import traceback
+            traceback.print_exc()
             return HttpResponse(status=500)
 
     return HttpResponse(status=405)
