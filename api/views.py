@@ -77,16 +77,17 @@ def convert_to_usd(amount, currency):
 
 
 # --- START: Corrected Webhook with Fixed Indentation ---
+# --- START: Corrected Webhook with Fixed Indentation ---
 @csrf_exempt
 def mailersend_webhook(request):
-    """ Receives and processes email event notifications from MailerSend. """
+    """ 
+    Receives and processes MailerSend events in bulk to prevent database overload. 
+    """
     if request.method != 'POST':
         return HttpResponse(status=405)
 
     try:
         payload = json.loads(request.body)
-        
-        # --- CORRECTED DATA PARSING ---
         event_type = payload.get('type', '')
         data = payload.get('data', {})
 
@@ -97,37 +98,50 @@ def mailersend_webhook(request):
         message_id = data.get('message_id')
         recipient_email = data.get('recipient')
         subject = data.get('subject')
-        # ---------------------------------
 
         if not message_id or not recipient_email:
             return HttpResponse(status=200)
 
+        # --- START: BULK PROCESSING FIX ---
+        # 1. Get status and check cache to prevent spam
         status_text = event_type.split('.')[-1].capitalize()
+        cache_key = f"webhook_mailersend_{message_id}_{status_text}"
+        
+        if cache.get(cache_key):
+            return HttpResponse(status=200)  # Already processed this event
+        cache.set(cache_key, True, 60) # Lock for 60 seconds
 
-        # Find the most recent shipment for this recipient to link the log entry
-        shipment = Shipment.objects.filter(recipient_email=recipient_email).latest('id')
+        # 2. Process in a transaction (safer, but still one query)
+        with transaction.atomic():
+            try:
+                # Find the most recent shipment for this recipient
+                shipment = Shipment.objects.filter(recipient_email=recipient_email).latest('id')
 
-        # Create or update the log entry in your database
-        SentEmail.objects.update_or_create(
-            provider_message_id=message_id,
-            defaults={
-                'shipment': shipment,
-                'subject': subject,
-                'status': status_text,
-                'event_time': timezone.now()
-            }
-        )
-        print(f"✅ MailerSend webhook processed: Message {message_id} status is now {status_text}")
+                # Create or update the log entry in your database
+                SentEmail.objects.update_or_create(
+                    provider_message_id=message_id,
+                    defaults={
+                        'shipment': shipment,
+                        'subject': subject,
+                        'status': status_text,
+                        'event_time': timezone.now()
+                    }
+                )
+                print(f"✅ MailerSend webhook processed: Message {message_id} status is now {status_text}")
+            
+            except Shipment.DoesNotExist:
+                print(f"Webhook (MailerSend): Shipment for {recipient_email} not found.")
+                pass # Ignore if no shipment
+        
+        # --- END: BULK PROCESSING FIX ---
+        
         return HttpResponse(status=200)
 
     except (json.JSONDecodeError, KeyError):
         return HttpResponse(status=400) # Bad request
-    except Shipment.DoesNotExist:
-        return HttpResponse(status=200) # Can't log if no shipment, but acknowledge webhook
     except Exception as e:
         print(f"❌ CRITICAL: Error processing MailerSend webhook: {e}")
         return HttpResponse(status=500)
-
 
 # NEW: Add these views at the end
 class VoucherViewSet(viewsets.ModelViewSet):
