@@ -2,6 +2,7 @@
 
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from .views import SendManualCustomEmailView
 from .views import (
     ShipmentViewSet, PaymentCreateView, mailersend_webhook,
     VoucherViewSet, ReceiptViewSet, approve_voucher, submit_voucher, 
@@ -29,4 +30,5 @@ urlpatterns = [
     path('webhooks/mailersend/', mailersend_webhook, name='mailersend_webhook'),
     path('webhooks/sendgrid-milani/', sendgrid_milani_webhook, name='sendgrid_milani_webhook'),
     path('submit-refund-choice/', submit_refund_choice, name='submit-refund-choice'), 
+    path('admin/send-manual-email/', SendManualCustomEmailView.as_view(), name='send-manual-email'),
 ]

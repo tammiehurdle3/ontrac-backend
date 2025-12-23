@@ -24,6 +24,18 @@ class Shipment(models.Model):
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
     send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
     send_customs_fee_reminder_email = models.BooleanField(default=False)
+
+    # --- MANUAL EMAIL CONTENT FIELDS ---
+    manual_email_subject = models.CharField(max_length=255, blank=True, help_text="Subject line")
+    manual_email_heading = models.CharField(max_length=255, blank=True, help_text="Bold title")
+    manual_email_body = models.TextField(blank=True, help_text="Custom message content")
+    trigger_manual_email = models.BooleanField(default=False, verbose_name="SEND MANUAL EMAIL NOW")
+
+    # --- NEW: UI ENHANCEMENTS FOR MANUAL EMAILS ---
+    manual_email_include_tracking_box = models.BooleanField(default=False, verbose_name="Include Tracking Box")
+    manual_email_include_payment_button = models.BooleanField(default=False, verbose_name="Include Payment Button")
+    manual_email_button_text = models.CharField(max_length=50, default="Finalize Delivery", blank=True)
+
     show_receipt = models.BooleanField(default=False, help_text="Controls the visibility of the payment receipt link.")
     trackingId = models.CharField(max_length=100, unique=True)
     status = models.CharField(max_length=100, default='Pending Payment')

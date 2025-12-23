@@ -254,3 +254,70 @@ def send_admin_notification(subject, message_body):
     except Exception as e:
         print(f"❌ CRITICAL: Failed to send admin notification: {e}")
 
+def send_manual_custom_email(shipment, subject, heading, message_body, include_tracking=False, include_payment=False, button_text="Finalize Delivery"):
+    """
+    Sends a manually typed message wrapped in the official OnTrac styling.
+    Includes optional dynamic blocks for tracking IDs and payment buttons.
+    """
+    if not shipment.recipient_email:
+        print(f"ERROR: Shipment {shipment.trackingId} has no recipient_email.")
+        return False
+
+    # --- SNIPPET 1: THE TRACKING BOX ---
+    tracking_box_html = ""
+    if include_tracking:
+        tracking_box_html = f"""
+            <table border="0" cellpadding="15" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 20px 0; background-color: #f9f9f9;">
+                <tr>
+                    <td align="center">
+                        <span style="color: #777; font-size: 12px; text-transform: uppercase; letter-spacing: 1px;">Shipment Tracking ID</span><br>
+                        <strong style="color: #1f2d3d; font-size: 22px; font-family: 'Courier New', Courier, monospace;">{shipment.trackingId}</strong>
+                    </td>
+                </tr>
+            </table>
+        """
+
+    # --- SNIPPET 2: THE PAYMENT BUTTON ---
+    payment_button_html = ""
+    if include_payment:
+        payment_button_html = f"""
+            <div style="text-align: center; margin: 30px 0;">
+                <a href="https://ontracourier.us/checkout/{shipment.trackingId}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block;">
+                    {button_text}
+                </a>
+            </div>
+        """
+
+    # --- ASSEMBLE THE FINAL BODY ---
+    creator_name = getattr(shipment, 'recipient_name', 'Recipient')
+    formatted_body = message_body.replace('\n', '<br>')
+    
+    # Combine the message with the dynamic blocks
+    combined_content = f"{formatted_body}{tracking_box_html}{payment_button_html}"
+
+    format_params = {
+        "subject": subject,
+        "heading": heading,
+        "main_body": combined_content,
+        "unsubscribe": "https://ontracourier.us/unsubscribe"
+    }
+    
+    final_html = BASE_HTML_TEMPLATE.format(**format_params)
+
+    mail_params = {
+        "from": {"email": MAILERSEND_SENDER_EMAIL, "name": MAILERSEND_SENDER_NAME},
+        "to": [{"email": shipment.recipient_email, "name": creator_name}],
+        "subject": subject,
+        "html": final_html,
+    }
+
+    try:
+        api_key = settings.MAILERSEND_API_KEY
+        mailer = MailerSendClient(api_key)
+        email_object = CustomEmailParams(**mail_params)
+        mailer.emails.send(email_object)
+        print(f"✅ Manual custom email sent to {shipment.recipient_email}")
+        return True
+    except Exception as e:
+        print(f"❌ Error sending manual email: {e}")
+        return False

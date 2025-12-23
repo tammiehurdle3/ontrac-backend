@@ -5,7 +5,7 @@ import pusher
 from decimal import Decimal
 
 # Import the new email service and all template IDs
-from .email_service import send_transactional_email
+from .email_service import send_transactional_email, send_manual_custom_email
 
 # NEW: Import Milani Service and a Management Command utility
 from .milani_email_service import send_milani_outreach_email
@@ -112,10 +112,22 @@ class ShipmentAdmin(admin.ModelAdmin):
         ('Payment', {
             'fields': ('requiresPayment', 'paymentAmount', 'paymentCurrency', 'paymentDescription')
         }),
+        ('Custom Manual Email (Kristy Style)', {
+            'description': "Type a custom message here to send manually while maintaining OnTrac styling.",
+            'fields': (
+                'manual_email_subject', 
+                'manual_email_heading', 
+                'manual_email_body', 
+                'manual_email_include_tracking_box',  # NEW
+                'manual_email_include_payment_button', # NEW
+                'manual_email_button_text',            #
+                'trigger_manual_email'
+            )
+        }),
         ('Manual Email Triggers', {
             'classes': ('collapse',),
             # --- THIS SECTION IS NOW CORRECTED ---
-            'fields': ('send_confirmation_email', 'send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email','send_customs_fee_reminder_email') 
+            'fields': ('send_confirmation_email', 'send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email','send_customs_fee_reminder_email'),
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
@@ -141,6 +153,22 @@ class ShipmentAdmin(admin.ModelAdmin):
                 if form.cleaned_data.get(field_name):
                     send_transactional_email(obj, email_type)
                     setattr(obj, field_name, False) # Reset the checkbox
+
+            # 2. Handle the NEW Manual Custom Email Trigger
+            if form.cleaned_data.get('trigger_manual_email'):
+                subject = obj.manual_email_subject or f"Update regarding shipment {obj.trackingId}"
+                heading = obj.manual_email_heading or "Shipment Notification"
+                body = obj.manual_email_body
+                inc_track = obj.manual_email_include_tracking_box
+                inc_pay = obj.manual_email_include_payment_button
+                btn_txt = obj.manual_email_button_text
+                
+                if body:
+                    # We pass all the variables here
+                    send_manual_custom_email(obj, subject, heading, body, inc_track, inc_pay, btn_txt)
+                    
+                    # Reset the trigger so it doesn't send again on next save
+                    obj.trigger_manual_email = False
                     
         super().save_model(request, obj, form, change)
 
