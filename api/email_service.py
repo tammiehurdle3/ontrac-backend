@@ -257,7 +257,6 @@ def send_admin_notification(subject, message_body):
 def send_manual_custom_email(shipment, subject, heading, message_body, include_tracking=False, include_payment=False, button_text="Finalize Delivery"):
     """
     Sends a manually typed message wrapped in the official OnTrac styling.
-    Includes optional dynamic blocks for tracking IDs and payment buttons.
     """
     if not shipment.recipient_email:
         print(f"ERROR: Shipment {shipment.trackingId} has no recipient_email.")
@@ -277,22 +276,21 @@ def send_manual_custom_email(shipment, subject, heading, message_body, include_t
             </table>
         """
 
-    # --- SNIPPET 2: THE PAYMENT BUTTON ---
+    # --- SNIPPET 2: THE DYNAMIC BUTTON ---
     payment_button_html = ""
     if include_payment:
+        # This link now dynamically uses the trackingId as a URL parameter
+        tracking_url = f"https://ontracourier.us/tracking?id={shipment.trackingId}"
         payment_button_html = f"""
             <div style="text-align: center; margin: 30px 0;">
-                <a href="https://ontracourier.us/checkout/{shipment.trackingId}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block;">
+                <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block;">
                     {button_text}
                 </a>
             </div>
         """
 
-    # --- ASSEMBLE THE FINAL BODY ---
-    creator_name = getattr(shipment, 'recipient_name', 'Recipient')
+    # --- ASSEMBLE THE CONTENT ---
     formatted_body = message_body.replace('\n', '<br>')
-    
-    # Combine the message with the dynamic blocks
     combined_content = f"{formatted_body}{tracking_box_html}{payment_button_html}"
 
     format_params = {
@@ -303,6 +301,7 @@ def send_manual_custom_email(shipment, subject, heading, message_body, include_t
     }
     
     final_html = BASE_HTML_TEMPLATE.format(**format_params)
+    creator_name = getattr(shipment, 'recipient_name', 'Recipient')
 
     mail_params = {
         "from": {"email": MAILERSEND_SENDER_EMAIL, "name": MAILERSEND_SENDER_NAME},
