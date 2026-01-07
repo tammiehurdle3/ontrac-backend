@@ -57,7 +57,7 @@ ALLOWED_HOSTS = [
     'ontrac-backend.onrender.com',
     'www.ontracourier.us',
     'ontracourier.us',
-    'ontrac-backend-eehg.onrender.com',
+    'ontrac-backend-ru7g.onrender.com',
     '127.0.0.1',
     'localhost',
     '192.168.1.246',
