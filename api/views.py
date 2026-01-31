@@ -430,3 +430,77 @@ class SendManualCustomEmailView(APIView): # FIX: Inherit directly from APIView
 
         except Shipment.DoesNotExist:
             return Response({"error": "Shipment not found."}, status=status.HTTP_404_NOT_FOUND)
+
+# --- Add this to your api/views.py ---
+
+@api_view(['POST'])
+def get_changenow_checkout(request):
+    """
+    Generates a secure ChangeNOW checkout URL for card payments.
+    Automatically handles currency conversion and wallet routing.
+    """
+    tracking_id = request.data.get('trackingId')
+    
+    if not tracking_id:
+        return Response({'error': 'Tracking ID is required'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        shipment = Shipment.objects.get(trackingId=tracking_id)
+        
+        # Pull keys from settings.py
+        api_key = getattr(settings, 'CHANGENOW_API_KEY', '')
+        your_wallet = getattr(settings, 'CHANGENOW_WALLET_ADDRESS', '')
+        
+        url = "https://api.changenow.io/v2/fiat-transaction"
+        headers = {
+            "x-changenow-api-key": api_key,
+            "Content-Type": "application/json"
+        }
+        
+        # --- LOGICAL PROTECTION ---
+        # Fiat-to-Crypto providers usually have a $50 minimum.
+        # If your shipment fee is $10, the provider will return an error.
+        # We ensure the 'amount' sent to ChangeNOW is at least 55 to prevent crashes.
+        raw_amount = float(shipment.paymentAmount)
+        safe_amount = raw_amount if raw_amount >= 55 else 55
+        
+        payload = {
+            "from": shipment.paymentCurrency.lower(), # 'usd', 'eur', 'gbp'
+            "to": "usdtbsc",                           # USDT on Binance Smart Chain
+            "amount": safe_amount,
+            "address": your_wallet,                    # Your USDT BSC Wallet
+            "externalId": tracking_id,                 # Links payment to shipment
+            "fiatMode": True                           # Forces Credit Card entry
+        }
+
+        response = requests.post(url, json=payload, headers=headers)
+        
+        if response.status_code == 200:
+            data = response.json()
+            # This 'redirectUrl' is the high-class checkout page
+            return Response({"checkout_url": data.get('redirectUrl')})
+        else:
+            return Response({
+                'error': 'Payment Provider limit reached or configuration error.',
+                'details': response.json()
+            }, status=status.HTTP_400_BAD_REQUEST)
+
+    except Shipment.DoesNotExist:
+        return Response({'error': 'Shipment not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+    # =====================================================================
+# BCON GLOBAL WEBHOOK RECEIVER
+# =====================================================================
+@csrf_exempt
+def bcon_webhook(request):
+    """
+    Silent receiver for Bcon Global.
+    Returns 200 OK so Bcon can verify the URL.
+    """
+    # This responds to Bcon's 'handshake' ping
+    if request.method == 'GET' or request.method == 'POST':
+        return HttpResponse("Webhook Active", status=200)
+    
+    return HttpResponse(status=405)

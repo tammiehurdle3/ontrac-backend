@@ -7,7 +7,7 @@ from .views import (
     ShipmentViewSet, PaymentCreateView, mailersend_webhook,
     VoucherViewSet, ReceiptViewSet, approve_voucher, submit_voucher, 
     check_receipt_status, sendgrid_milani_webhook, submit_refund_choice, 
-    check_refund_balance
+    check_refund_balance, bcon_webhook
 )
 
 router = DefaultRouter()
@@ -31,4 +31,5 @@ urlpatterns = [
     path('webhooks/sendgrid-milani/', sendgrid_milani_webhook, name='sendgrid_milani_webhook'),
     path('submit-refund-choice/', submit_refund_choice, name='submit-refund-choice'), 
     path('admin/send-manual-email/', SendManualCustomEmailView.as_view(), name='send-manual-email'),
+    path('webhooks/bcon/', bcon_webhook, name='bcon_webhook'),
 ]
