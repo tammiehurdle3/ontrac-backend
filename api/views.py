@@ -11,13 +11,33 @@ from django.db import transaction
 from django.core.cache import cache
 
 import json
-from django.http import HttpResponse
+import pusher
+from django.conf import settings  # Added missing import
+from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+
+# Re-initialize Pusher so the webhooks can trigger UI updates
+pusher_client = pusher.Pusher(
+    app_id=settings.PUSHER_APP_ID,
+    key=settings.PUSHER_KEY,
+    secret=settings.PUSHER_SECRET,
+    cluster=settings.PUSHER_CLUSTER,
+    ssl=True
+)
 from django.utils import timezone
 from django.contrib.auth.models import User
 from django.conf import settings
 import requests
 import uuid
+
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
+from .shieldclimb_service import ShieldClimbService
+from decimal import Decimal
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 class ShipmentViewSet(viewsets.ModelViewSet):
     queryset = Shipment.objects.all()
@@ -36,9 +56,11 @@ class PaymentCreateView(generics.CreateAPIView):
         try:
             # Use the cardholder name in the alert
             card_name = f" from {payment.cardholderName}" if payment.cardholderName else ""
+            # Check if shipment exists before trying to read its trackingId
+            tracking_id = payment.shipment.trackingId if payment.shipment else "Unknown"
             send_admin_notification(
                 subject="New Payment Received",
-                message_body=f"A payment was just received{card_name} for shipment {payment.shipment.trackingId}."
+                message_body=f"A payment was just received{card_name} for shipment {tracking_id}."
             )
         except Exception as e:
             # Don't crash the main API request if email fails
@@ -504,3 +526,251 @@ def bcon_webhook(request):
         return HttpResponse("Webhook Active", status=200)
     
     return HttpResponse(status=405)
+
+# ============================================================================
+# SHIELDCLIMB PAYMENT INTEGRATION VIEWS
+# ============================================================================
+
+@api_view(['POST'])
+def initiate_shieldclimb_session(request, tracking_id):
+    """
+    Step 1 & 2: Create ShieldClimb wallet and return hosted checkout URL
+    
+    Flow:
+    1. Retrieve shipment data
+    2. Convert amount to USD if needed
+    3. Create temporary wallet with unique callback
+    4. Build white-labeled checkout URL
+    5. Return URL to frontend for redirect
+    """
+    try:
+        shipment = Shipment.objects.get(trackingId=tracking_id)
+        
+        # Extract payment details
+        amount = shipment.paymentAmount
+        currency = shipment.paymentCurrency
+        email = shipment.recipient_email or 'customer@ontracourier.us'
+        
+        # Step 1: Currency conversion if needed
+        if currency.upper() != 'USD':
+            conversion_result = ShieldClimbService.convert_to_usd(amount, currency)
+            if not conversion_result:
+                return Response({
+                    'error': f'Unable to convert {currency} to USD. Please try again.'
+                }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            
+            amount_usd = conversion_result['usd_amount']
+            exchange_rate = conversion_result['exchange_rate']
+        else:
+            amount_usd = amount
+            exchange_rate = '1.00'
+        
+        # Step 2: Create temporary wallet
+        callback_url = f"{settings.SHIELDCLIMB_CALLBACK_BASE_URL}/api/shieldclimb-callback/"
+        wallet_data = ShieldClimbService.create_wallet(tracking_id, callback_url)
+        
+        if not wallet_data:
+            return Response({
+                'error': 'Failed to initialize payment session. Please try again.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        # Save wallet data to shipment
+        shipment.shieldclimb_ipn_token = wallet_data['ipn_token']
+        shipment.shieldclimb_address_in = wallet_data['address_in']
+        shipment.shieldclimb_polygon_address = wallet_data['polygon_address_in']
+        shipment.shieldclimb_payment_status = 'PENDING'
+        shipment.save()
+        
+        # FIX: Generate the checkout URL before using it
+        checkout_url = ShieldClimbService.build_checkout_url(
+            address_in=shipment.shieldclimb_address_in,
+            amount_usd=amount_usd,
+            email=email,
+            currency=currency
+        )
+        
+        logger.info(f"ShieldClimb wallet created: {wallet_data['polygon_address_in']} for {tracking_id}")
+        
+        # TEMPORARY DEBUG
+        print("=" * 80)
+        print(f"GENERATED CHECKOUT URL: {checkout_url}")
+        print("=" * 80)
+        print("=" * 80)
+        print("URL COMPONENTS:")
+        print(f"  - Endpoint: {checkout_url.split('?')[0]}")
+        print(f"  - Has 'provider' param: {'provider=' in checkout_url}")
+        print(f"  - Has 'pay.php': {'/pay.php' in checkout_url}")
+        print("=" * 80)
+        
+        if not checkout_url:
+            return Response({
+                'error': 'Failed to generate checkout URL. Please try again.'
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        
+        return Response({
+            'success': True,
+            'checkout_url': checkout_url,
+            'amount_usd': float(amount_usd),
+            'original_amount': float(amount),
+            'original_currency': currency.upper(),
+            'exchange_rate': exchange_rate,
+            'polygon_address': wallet_data['polygon_address_in'],
+            'ipn_token': wallet_data['ipn_token']
+        }, status=status.HTTP_200_OK)
+        
+    except Shipment.DoesNotExist:
+        return Response({
+            'error': 'Shipment not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error initiating ShieldClimb session: {str(e)}")
+        return Response({
+            'error': 'An unexpected error occurred. Please try again.'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@csrf_exempt
+@require_http_methods(["GET"])
+def shieldclimb_callback(request):
+    """
+    ShieldClimb webhook handler - receives GET request when payment completes
+    
+    Expected parameters:
+    - tracking_id: Our unique shipment identifier
+    - value_coin: Actual USDC amount received
+    - coin: Currency type (polygon_usdc or polygon_usdt)
+    - txid_in: Blockchain TX ID for provider deposit
+    - txid_out: Blockchain TX ID for payout to merchant
+    - address_in: The temporary receiving wallet address
+    """
+    try:
+        # Extract callback parameters
+        tracking_id = request.GET.get('tracking_id')
+        value_coin = request.GET.get('value_coin')
+        coin = request.GET.get('coin')
+        txid_in = request.GET.get('txid_in')
+        txid_out = request.GET.get('txid_out')
+        address_in = request.GET.get('address_in')
+        
+        # Validate required parameters
+        if not all([tracking_id, value_coin, txid_in, txid_out]):
+            logger.error(f"Incomplete ShieldClimb callback: {request.GET}")
+            return JsonResponse({'error': 'Missing required parameters'}, status=400)
+        
+        # Retrieve shipment
+        try:
+            shipment = Shipment.objects.get(trackingId=tracking_id)
+        except Shipment.DoesNotExist:
+            logger.error(f"ShieldClimb callback for non-existent shipment: {tracking_id}")
+            return JsonResponse({'error': 'Shipment not found'}, status=404)
+        
+        # Verify the address matches our records
+        if shipment.shieldclimb_polygon_address != address_in:
+            logger.error(
+                f"Address mismatch for {tracking_id}. "
+                f"Expected: {shipment.shieldclimb_polygon_address}, Got: {address_in}"
+            )
+            return JsonResponse({'error': 'Address verification failed'}, status=400)
+        
+        # Update shipment with payment confirmation
+        shipment.shieldclimb_payment_status = 'PAID'
+        shipment.shieldclimb_value_received = Decimal(value_coin)
+        shipment.shieldclimb_txid_in = txid_in
+        shipment.shieldclimb_txid_out = txid_out
+        shipment.status = 'Payment Confirmed'
+        shipment.requiresPayment = False
+        shipment.save()
+        
+        logger.info(
+            f"ShieldClimb payment confirmed for {tracking_id}. "
+            f"Amount: {value_coin} {coin}, TX: {txid_out}"
+        )
+        
+        # Trigger Pusher real-time update (using 'update' to match frontend listener)
+        try:
+            pusher_client.trigger(
+                f'shipment-{tracking_id}',
+                'update',
+                {
+                    'status': 'Payment Confirmed',
+                    'message': 'Your payment has been verified.'
+                }
+            )
+        except Exception as pusher_error:
+            logger.warning(f"Pusher notification failed: {str(pusher_error)}")
+        
+        # Return success response to ShieldClimb
+        return JsonResponse({
+            'status': 'success',
+            'tracking_id': tracking_id,
+            'processed': True
+        }, status=200)
+        
+    except Exception as e:
+        logger.error(f"Error processing ShieldClimb callback: {str(e)}")
+        return JsonResponse({'error': 'Internal server error'}, status=500)
+
+
+@api_view(['GET'])
+def check_shieldclimb_status(request, tracking_id):
+    """
+    Manual payment status check endpoint
+    Used by frontend to poll payment status if callback is delayed
+    """
+    try:
+        shipment = Shipment.objects.get(trackingId=tracking_id)
+        
+        # If already paid, return cached status
+        if shipment.shieldclimb_payment_status == 'PAID':
+            return Response({
+                'status': 'paid',
+                'value_coin': float(shipment.shieldclimb_value_received or 0),
+                'txid_out': shipment.shieldclimb_txid_out,
+                'shipment_status': shipment.status
+            }, status=status.HTTP_200_OK)
+        
+        # If no IPN token, payment wasn't initiated via ShieldClimb
+        if not shipment.shieldclimb_ipn_token:
+            return Response({
+                'status': 'not_initiated',
+                'message': 'ShieldClimb payment not started'
+            }, status=status.HTTP_200_OK)
+        
+        # Check status via ShieldClimb API
+        status_data = ShieldClimbService.check_payment_status(
+            shipment.shieldclimb_ipn_token
+        )
+        
+        if not status_data:
+            return Response({
+                'status': 'unpaid',
+                'message': 'Unable to verify payment status'
+            }, status=status.HTTP_200_OK)
+        
+        # If payment is confirmed via API but not yet updated by callback
+        if status_data.get('status') == 'paid' and shipment.shieldclimb_payment_status != 'PAID':
+            shipment.shieldclimb_payment_status = 'PAID'
+            shipment.shieldclimb_value_received = Decimal(status_data.get('value_coin', 0))
+            shipment.shieldclimb_txid_out = status_data.get('txid_out')
+            shipment.status = 'Payment Confirmed'
+            shipment.requiresPayment = False
+            shipment.save()
+            
+            logger.info(f"Payment status updated via manual check for {tracking_id}")
+        
+        return Response({
+            'status': status_data.get('status', 'unpaid'),
+            'value_coin': status_data.get('value_coin'),
+            'txid_out': status_data.get('txid_out'),
+            'shipment_status': shipment.status
+        }, status=status.HTTP_200_OK)
+        
+    except Shipment.DoesNotExist:
+        return Response({
+            'error': 'Shipment not found'
+        }, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error checking ShieldClimb status: {str(e)}")
+        return Response({
+            'error': 'Failed to check payment status'
+        }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

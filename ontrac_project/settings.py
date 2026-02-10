@@ -169,3 +169,40 @@ CACHES = {
         }
     }
 }
+
+# ============================================================================
+# SHIELDCLIMB PAYMENT GATEWAY CONFIGURATION
+# ============================================================================
+
+# Your Polygon USDC payout wallet address
+SHIELDCLIMB_PAYOUT_WALLET = env(
+    'SHIELDCLIMB_PAYOUT_WALLET',
+    default='0x5246ecaff77bBAE8Ba50Ff3664bB1Ee9E23d7cAE'
+)
+
+# Callback base URL (ShieldClimb will send GET requests here)
+# Development: http://127.0.0.1:8000
+# Production: https://ontrac-backend-ru7g.onrender.com
+SHIELDCLIMB_CALLBACK_BASE_URL = env(
+    'SHIELDCLIMB_CALLBACK_BASE_URL',
+    default='https://ontrac-backend-ru7g.onrender.com'
+)
+
+# White-label custom domain (optional)
+# Set this to your custom subdomain for a fully branded experience
+SHIELDCLIMB_CUSTOM_DOMAIN = env(
+    'SHIELDCLIMB_CUSTOM_DOMAIN',
+    default='pay.ontracourier.us'
+)
+
+# Brand logo URL for checkout page
+SHIELDCLIMB_LOGO_URL = env(
+    'SHIELDCLIMB_LOGO_URL',
+    default='https://ontracourier.us/ontrac_favicon.png'
+)
+
+# Theme color for checkout (brand blue instead of red for trust)
+SHIELDCLIMB_THEME_COLOR = env(
+    'SHIELDCLIMB_THEME_COLOR',
+    default='#1778F2'  # Professional blue from your style.css
+)

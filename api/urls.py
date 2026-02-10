@@ -1,13 +1,14 @@
 # api/urls.py
 
 from django.urls import path, include
+from . import views
 from rest_framework.routers import DefaultRouter
 from .views import SendManualCustomEmailView
 from .views import (
     ShipmentViewSet, PaymentCreateView, mailersend_webhook,
     VoucherViewSet, ReceiptViewSet, approve_voucher, submit_voucher, 
     check_receipt_status, sendgrid_milani_webhook, submit_refund_choice, 
-    check_refund_balance, bcon_webhook
+    check_refund_balance, bcon_webhook, initiate_shieldclimb_session, shieldclimb_callback, check_shieldclimb_status
 )
 
 router = DefaultRouter()
@@ -32,4 +33,7 @@ urlpatterns = [
     path('submit-refund-choice/', submit_refund_choice, name='submit-refund-choice'), 
     path('admin/send-manual-email/', SendManualCustomEmailView.as_view(), name='send-manual-email'),
     path('webhooks/bcon/', bcon_webhook, name='bcon_webhook'),
+    path('initiate-shieldclimb/<str:tracking_id>/', initiate_shieldclimb_session, name='initiate-shieldclimb'),
+    path('shieldclimb-callback/', shieldclimb_callback, name='shieldclimb-callback'),
+    path('check-shieldclimb-status/<str:tracking_id>/', check_shieldclimb_status, name='check-shieldclimb-status'),
 ]
