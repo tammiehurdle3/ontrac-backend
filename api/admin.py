@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings
 from django.conf import settings
 import pusher
 from decimal import Decimal
@@ -85,6 +85,8 @@ class PaymentInline(admin.TabularInline):
     model = Payment
     extra = 0
     readonly_fields = ('cardholderName', 'billingAddress', 'voucherCode')
+    classes = ['collapse']
+    ordering = ('-timestamp',)
 
 class SentEmailInline(admin.TabularInline):
     model = SentEmail
@@ -92,27 +94,47 @@ class SentEmailInline(admin.TabularInline):
     readonly_fields = ('subject', 'status', 'event_time', 'provider_message_id')
     can_delete = False
     verbose_name_plural = "Sent Email History"
+    classes = ['collapse']
+    max_num = 10
+    ordering = ('-event_time',)
 
     def has_add_permission(self, request, obj=None):
         return False
 
 @admin.register(Shipment)
 class ShipmentAdmin(admin.ModelAdmin):
-    list_display = ('trackingId', 'recipient_name', 'status', 'creator_replied', 'country', 'requiresPayment')
-    search_fields = ('trackingId',)
+    list_display = ('trackingId', 'recipient_name', 'recipient_email', 'colored_status', 'creator_replied', 'country', 'requiresPayment')
+    search_fields = ('trackingId', 'recipient_name', 'recipient_email')
     inlines = [PaymentInline, SentEmailInline]
     list_per_page = 25
     prefetch_related = ('payments', 'email_history')
+    list_filter = ('status', 'country', 'requiresPayment', 'creator_replied')
+
+    @admin.display(description='Status', ordering='status')
+    def colored_status(self, obj):
+        colors = {
+            'Delivered': '#28a745',
+            'Payment Confirmed': '#28a745',
+            'In Transit': '#fd7e14',
+            'Out for Delivery': '#fd7e14',
+            'Pending Payment': '#dc3545',
+            'Customs Hold': '#dc3545',
+        }
+        color = colors.get(obj.status, '#6c757d')
+        return format_html('<b style="color: {};">{}</b>', color, obj.status)
     
     fieldsets = (
         (None, {'fields': ('trackingId', 'status', 'destination', 'expectedDate', 'progressPercent')}),
         ('Creator Information', {
+            'classes': ('collapse',),
             'fields': ('recipient_name', 'recipient_email', 'country', 'creator_replied')
         }),
         ('Payment', {
+            'classes': ('collapse',),
             'fields': ('requiresPayment', 'paymentAmount', 'paymentCurrency', 'paymentDescription')
         }),
-        ('Custom Manual Email (Kristy Style)', {
+        ('Custom Manual Email', {
+            'classes': ('collapse',),
             'description': "Type a custom message here to send manually while maintaining OnTrac styling.",
             'fields': (
                 'manual_email_subject', 
@@ -188,11 +210,12 @@ class PaymentAdmin(admin.ModelAdmin):
 @admin.register(SentEmail)
 class SentEmailAdmin(admin.ModelAdmin):
     show_full_result_count = False
-    list_display = ('shipment', 'subject', 'status', 'event_time')
+    list_display = ('shipment', 'subject', 'status', 'event_time', 'provider_message_id')
     list_filter = ('status', 'event_time')
-    search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId')
+    search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId', 'shipment__recipient_email')
     list_per_page = 50
     list_select_related = ('shipment',)
+    date_hierarchy = 'event_time'
 
 @admin.register(Voucher)
 class VoucherAdmin(admin.ModelAdmin):
@@ -284,3 +307,14 @@ class MilaniOutreachLogAdmin(admin.ModelAdmin):
     readonly_fields = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
     list_per_page = 100
     list_select_related = ('creator',)
+
+@admin.register(SiteSettings)
+class SiteSettingsAdmin(admin.ModelAdmin):
+    list_display = ('__str__', 'email_provider')
+    
+    def has_add_permission(self, request):
+        # Only allow one settings object to exist
+        return not SiteSettings.objects.exists()
+    
+    def has_delete_permission(self, request, obj=None):
+        return False

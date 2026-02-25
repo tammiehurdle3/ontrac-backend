@@ -61,7 +61,7 @@ ALLOWED_HOSTS = [
     '127.0.0.1',
     'localhost',
     '192.168.1.246',
-    '41819d3c292b.ngrok-free.app'
+    '316c-104-234-32-179.ngrok-free.app',
 ]
 
 # ... (The rest of your settings file remains exactly the same) ...
@@ -139,7 +139,9 @@ CORS_ALLOWED_ORIGINS = [
 # --- START: New setting for Webhook Security ---
 # This tells Django to trust POST requests coming from your ngrok URL
 CSRF_TRUSTED_ORIGINS = [
-    'https://ec5125113bcf.ngrok-free.app'
+    'https://ec5125113bcf.ngrok-free.app',
+    'https://316c-104-234-32-179.ngrok-free.app',
+    'https://ontrac-backend-ru7g.onrender.com',
 ]
 # --- SECURE API KEY CONFIGURATION ---
 # FIX: Safely loading keys from your .env file
@@ -154,6 +156,9 @@ PUSHER_CLUSTER = env('PUSHER_CLUSTER')
 #BREVO_API_KEY = env('BREVO_API_KEY', default='')
 #MAILERSEND TO REPLACEE BREVO, TRANSACTIONAL EMAILS FOR ONTRAC
 MAILERSEND_API_KEY = env('MAILERSEND_API_KEY', default='')
+
+# RESEND FOR TRANSACTIONAL EMAILS
+RESEND_API_KEY = env('RESEND_API_KEY', default='')
 
 #MILANI INITIAL OUTREACH
 SENDGRID_API_KEY = env('SENDGRID_API_KEY', default='')

@@ -15,6 +15,7 @@ import pusher
 from django.conf import settings  # Added missing import
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
+from .models import SiteSettings 
 
 # Re-initialize Pusher so the webhooks can trigger UI updates
 pusher_client = pusher.Pusher(
@@ -124,9 +125,12 @@ def mailersend_webhook(request):
         status_text = event_type.split('.')[-1].capitalize()
         cache_key = f"webhook_mailersend_{message_id}_{status_text}"
         
-        if cache.get(cache_key):
-            return HttpResponse(status=200) 
-        cache.set(cache_key, True, 60)
+        try:
+            if cache.get(cache_key):
+                return HttpResponse(status=200)
+            cache.set(cache_key, True, 60)
+        except Exception as cache_error:
+            print(f"⚠️ Cache unavailable, proceeding without dedup: {cache_error}")
 
         with transaction.atomic():
             try:
@@ -153,6 +157,72 @@ def mailersend_webhook(request):
         return HttpResponse(status=400)
     except Exception as e:
         print(f"❌ CRITICAL: Error processing MailerSend webhook: {e}")
+        return HttpResponse(status=500)
+
+@csrf_exempt
+def resend_webhook(request):
+    """
+    Receives and processes Resend email events.
+    Resend sends individual events (not bulk like MailerSend).
+    """
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    try:
+        payload = json.loads(request.body)
+        event_type = payload.get('type', '')  # e.g. "email.opened", "email.clicked"
+        data = payload.get('data', {})
+
+        email_id = data.get('email_id')
+        recipient_email = data.get('to', [None])[0] if isinstance(data.get('to'), list) else data.get('to')
+        subject = data.get('subject', '')
+
+        if not email_id or not recipient_email:
+            return HttpResponse(status=200)
+
+        # Map Resend event types to status text
+        status_map = {
+            'email.sent': 'Sent',
+            'email.delivered': 'Delivered',
+            'email.opened': 'Opened',
+            'email.clicked': 'Clicked',
+            'email.bounced': 'Bounced',
+            'email.complained': 'Reported Spam',
+        }
+        status_text = status_map.get(event_type)
+        if not status_text:
+            return HttpResponse(status=200)
+
+        cache_key = f"webhook_resend_{email_id}_{status_text}"
+        try:
+            if cache.get(cache_key):
+                return HttpResponse(status=200)
+            cache.set(cache_key, True, 60)
+        except Exception as cache_error:
+            print(f"⚠️ Cache unavailable, proceeding without dedup: {cache_error}")
+
+        with transaction.atomic():
+            try:
+                shipment = Shipment.objects.filter(recipient_email=recipient_email).latest('id')
+                SentEmail.objects.update_or_create(
+                    provider_message_id=email_id,
+                    defaults={
+                        'shipment': shipment,
+                        'subject': subject,
+                        'status': status_text,
+                        'event_time': timezone.now()
+                    }
+                )
+                print(f"✅ Resend webhook processed: {email_id} is now {status_text}")
+            except Shipment.DoesNotExist:
+                print(f"Webhook (Resend): Shipment for {recipient_email} not found.")
+
+        return HttpResponse(status=200)
+
+    except (json.JSONDecodeError, KeyError):
+        return HttpResponse(status=400)
+    except Exception as e:
+        print(f"❌ Error processing Resend webhook: {e}")
         return HttpResponse(status=500)
 
 class VoucherViewSet(viewsets.ModelViewSet):
@@ -774,3 +844,36 @@ def check_shieldclimb_status(request, tracking_id):
         return Response({
             'error': 'Failed to check payment status'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@api_view(['GET', 'POST'])
+def email_provider_settings(request):
+    """
+    GET: Returns the currently active email provider.
+    POST: Switches the active provider. Admin only.
+    Expected POST body: { "provider": "resend" } or { "provider": "mailersend" }
+    """
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    settings_obj, _ = SiteSettings.objects.get_or_create(pk=1)
+
+    if request.method == 'GET':
+        return Response({
+            'active_provider': settings_obj.email_provider,
+            'available_providers': ['mailersend', 'resend']
+        })
+
+    if request.method == 'POST':
+        new_provider = request.data.get('provider')
+        valid = ['mailersend', 'resend']
+        if new_provider not in valid:
+            return Response(
+                {'error': f'Invalid provider. Choose from: {valid}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        settings_obj.email_provider = new_provider
+        settings_obj.save()
+        return Response({
+            'message': f'Email provider switched to {new_provider} successfully.',
+            'active_provider': new_provider
+        })

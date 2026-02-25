@@ -151,3 +151,28 @@ class RefundBalance(models.Model):
     claim_token = models.CharField(max_length=64, unique=True, blank=True, null=True) 
     def __str__(self):
         return f"Balance for {self.recipient_email} ({self.excess_amount_usd} USD)"
+
+class SiteSettings(models.Model):
+    EMAIL_PROVIDER_CHOICES = [
+        ('mailersend', 'MailerSend'),
+        ('resend', 'Resend'),
+    ]
+    email_provider = models.CharField(
+        max_length=20,
+        choices=EMAIL_PROVIDER_CHOICES,
+        default='resend',
+        help_text="The active email provider. Change this to switch providers instantly."
+    )
+
+    class Meta:
+        verbose_name = "Site Settings"
+        verbose_name_plural = "Site Settings"
+
+    def __str__(self):
+        return f"Site Settings (Active Provider: {self.email_provider})"
+
+    @classmethod
+    def get_active_provider(cls):
+        """Returns the currently active email provider string."""
+        settings_obj, _ = cls.objects.get_or_create(pk=1)
+        return settings_obj.email_provider
