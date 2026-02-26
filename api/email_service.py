@@ -29,11 +29,11 @@ BASE_HTML_TEMPLATE = """
 """
 
 STATUS_UPDATE_HTML = """
-<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2><p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 25px 0;">Here is the latest tracking update for your shipment with OnTrac.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><p>We look forward to a successful delivery.</p><br/><p>Thank you,<br><strong>The OnTrac Team</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
+<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2<p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 20px 0;">There has been an update on your Milani Cosmetics shipment. See the latest status below.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><p>For a full history of all events for this shipment, click the button below.</p><div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><br/><p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
 """
 
-MAILERSEND_SENDER_EMAIL = 'support@ontracourier.us'
-MAILERSEND_SENDER_NAME = 'OnTrac Courier'
+MAILERSEND_SENDER_EMAIL = 'notifications@ontracourier.us'
+MAILERSEND_SENDER_NAME = 'OnTrac Notifications'
 
 
 # ============================================================
@@ -51,6 +51,8 @@ def _dispatch_email(to_email: str, to_name: str, subject: str, html: str):
 
     if provider == 'resend':
         _send_via_resend(to_email, to_name, subject, html)
+    elif provider == 'sendgrid':
+        _send_via_sendgrid(to_email, to_name, subject, html)
     else:
         _send_via_mailersend(to_email, to_name, subject, html)
 
@@ -73,6 +75,31 @@ def _send_via_resend(to_email: str, to_name: str, subject: str, html: str):
     else:
         email_id = 'unknown'
     print(f"✅ Resend email sent. ID: {email_id}")
+
+
+def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str):
+    """Sends email using SendGrid API directly via requests."""
+    import requests
+    api_key = settings.SENDGRID_TRANSACTIONAL_API_KEY
+    payload = {
+        "personalizations": [{"to": [{"email": to_email, "name": to_name}]}],
+        "from": {"email": MAILERSEND_SENDER_EMAIL, "name": MAILERSEND_SENDER_NAME},
+        "subject": subject,
+        "content": [{"type": "text/html", "value": html}]
+    }
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json"
+    }
+    response = requests.post(
+        "https://api.sendgrid.com/v3/mail/send",
+        json=payload,
+        headers=headers
+    )
+    if response.status_code in [200, 202]:
+        print(f"✅ SendGrid email sent to {to_email}")
+    else:
+        raise Exception(f"SendGrid error {response.status_code}: {response.text}")
 
 
 def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str):
@@ -104,22 +131,22 @@ def send_transactional_email(shipment, email_type: str):
     creator_name = getattr(shipment, 'recipient_name', 'Creator')
 
     if email_type == 'confirmation':
-        subject = f"Your Milani Shipment is Confirmed (Tracking #{shipment.trackingId})"
-        heading = "Confirming Your Milani Cosmetics Shipment"
+        subject = f"Your Milani Cosmetics Package Has Been Registered (#{shipment.trackingId})"
+        heading = "Your Milani Cosmetics Package Has Been Registered"
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>This is a notification from OnTrac. Your package from Milani Cosmetics has been processed in our system and is being prepared for shipment.</p>
+            <p>Your Milani Cosmetics shipment has been accepted by OnTrac Courier and logged in our system. Your package is currently being prepared for dispatch.</p>
             <p style="background-color: #f7f7f7; padding: 10px; border-radius: 4px; margin-top: 20px;"><strong>Tracking ID:</strong> {shipment.trackingId}</p>
-            <p>To ensure our automated delivery alerts are reaching your inbox correctly for all future updates, would you mind sending a quick 'GOT IT' or 'OK' in reply?</p>
-            <p>The direct tracking link will be sent in a separate email shortly.</p>
+            <p>To ensure our automated delivery alerts are reaching your inbox correctly for all future updates, please reply to this email with the word <strong>CONFIRM</strong>.</p>
+            <p>Your full tracking details will follow in a separate notification once your shipment is in transit.</p>
             <br>
-            <p>Thank you,<br><strong>The OnTrac Team</strong></p>
+            <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
     elif email_type == 'intl_tracking':
-        subject = f"Tracking Information for Your Shipment #{shipment.trackingId}"
-        heading = "Shipment Tracking Details"
-        greeting = replied_greeting if shipment.creator_replied else "<p>Following up on our previous message, here are the details and the direct link to our tracking portal. Your package is being prepared for dispatch.</p>"
+        subject = f"Your Milani Package is On Its Way — Full Tracking Details Inside"
+        heading = "Your Milani Package is On Its Way"
+        greeting = "<p>Your confirmation has been received. Your Milani Cosmetics shipment is now in active transit and being monitored at every checkpoint.</p>" if shipment.creator_replied else "<p>Your Milani Cosmetics shipment is now in transit. If you did not receive our initial notification, please check your spam folder and mark OnTrac as a trusted sender to ensure all future updates reach you.</p>"
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
@@ -132,94 +159,92 @@ def send_transactional_email(shipment, email_type: str):
             <p>Hello {creator_name},</p>
             {greeting}
             {summary_table}
-            <p><strong>How to track your package:</strong></p>
             <ol style="padding-left: 20px; margin-top: 0;">
-                <li>Click the button below to go to our tracking homepage.</li>
-                <li>Copy and paste your Tracking ID into the search field.</li>
+                <li>Click the button below to visit our tracking portal.</li>
+                <li>Enter your Tracking ID in the search field.</li>
             </ol>
             <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a></div>
             <p>We look forward to a successful delivery.</p>
-            <p>Thank you,<br><strong>The OnTrac Team</strong></p>
+            <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
 
     elif email_type == 'intl_arrived':
-        subject = f"Your OnTrac Shipment has arrived in {shipment.country or 'your destination country'}"
-        heading = f"Your Shipment Has Arrived in {shipment.country or 'your country'}"
+        subject = f"Your Milani Package Has Arrived in {shipment.country or 'Your Country'} — Final Stage Underway"
+        heading = f"Your Milani Package Has Arrived in {shipment.country or 'Your Country'}"
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>We're pleased to let you know that your shipment, tracking ID <strong>{shipment.trackingId}</strong>, has successfully arrived in {shipment.country or 'your country'}.</p>
-            <p>It will now be processed for final clearance before being scheduled for delivery.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a></div>
-            <p>Thank you,<br><strong>The OnTrac Team</strong></p>
+            <p>Your Milani Cosmetics shipment has arrived in <strong>{shipment.country or 'your country'}</strong> and is now in the final stage of its journey to you.</p>
+            <p>Your package is now undergoing customs clearance and will be handed to the local delivery carrier for final delivery once cleared.</p>
+            <p><strong>No action is required from you at this time.</strong></p>
+            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package →</a></div>
+            <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
 
     elif email_type == 'us_fee':
         subject = f"Action Required: Finalize Your Milani Shipment #{shipment.trackingId}"
-        heading = "Finalize Your Milani Cosmetics Shipment"
+        heading = "Action Required: Finalize Your Milani Shipment"
         amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
-        greeting = replied_greeting if shipment.creator_replied else ""
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td>{shipment.status}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Amount Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td>Payment Required — Dispatch Pending</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            {greeting}
-            <p>Your package is now ready for the final step before being dispatched.</p>
+            <p>This is an automated payment notice from OnTrac Courier regarding your Milani Cosmetics shipment.</p>
+            <p>Your package has been processed and is ready for dispatch, pending settlement of an outstanding logistics and priority handling fee.</p>
             {summary_table}
-            <ol style="padding-left: 20px; margin-top: 0;">
-                <li>Click the button below to go to our tracking homepage.</li>
-                <li>Copy and paste your Tracking ID into the search field.</li>
-                <li>On your shipment details page, locate and click the "Pay Now" button to finalize the fee.</li>
-            </ol>
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Finalize Delivery</a></div>
-            <p>Thank you,<br><strong>The OnTrac Team</strong></p>
+            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
+            <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
     elif email_type == 'customs_fee':
-        subject = f"Action Required: Custom Clearance for Shipment #{shipment.trackingId}"
-        heading = "Finalize Customs Clearance for Your Shipment"
+        subject = f"Import Duty Notice — Action Required for Shipment #{shipment.trackingId} ({shipment.country or 'International'})"
+        heading = "Import Duty Notice — Action Required"
         amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{shipment.status}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Customs Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Hold Location:</strong></td><td>{shipment.country or 'International'} Customs</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Import Duty Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>This is an important notification regarding your Milani Cosmetics shipment in {shipment.country or 'your country'}. It has been processed by customs and is now awaiting a standard import duty payment.</p>
+            <p>OnTrac Courier has been notified by customs authorities in <strong>{shipment.country or 'your country'}</strong> that your Milani Cosmetics shipment is subject to a standard import duty assessment.</p>
+            <p>Your package cannot be released for delivery until this fee has been settled.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Pay Customs Fee</a></div>
-            <p>Thank you,<br><strong>The OnTrac Team</strong></p>
+            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Clear Customs &amp; Release Shipment →</a></div>
+            <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
     elif email_type == 'customs_fee_reminder':
-        subject = f"URGENT: Payment Reminder - Customs Hold on Shipment #{shipment.trackingId}"
-        heading = "Finalize Customs Clearance for Your Shipment"
+        subject = f"Final Notice: Customs Payment Overdue — Shipment #{shipment.trackingId} at Risk of Return"
+        heading = "Final Notice: Customs Payment Overdue"
         amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{shipment.status}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Customs Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">OVERDUE — CUSTOMS HOLD</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>This shipment remains on hold in {shipment.country or 'your country'} pending an outstanding import duty payment. Failure to pay may result in storage fees or return to sender.</p>
+            <p>This is a final notice regarding your Milani Cosmetics shipment currently on hold at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
+            <p>The required import duty payment has not been received. Shipments that remain uncleared are subject to daily storage charges and risk being returned to sender or destroyed by customs authorities.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Pay Customs Fee Now</a></div>
-            <p>Thank you,<br><strong>The OnTrac Team</strong></p>
+            <p>Immediate payment is required to prevent further action.</p>
+            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">SETTLE OUTSTANDING FEE →</a></div>
+            <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
+            <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
 
     elif email_type == 'status_update':
         html_template = STATUS_UPDATE_HTML
-        subject = f"Shipment Status Update for #{shipment.trackingId}"
+        subject = f"Shipment Update: {shipment.status} — Tracking #{shipment.trackingId}"
 
     format_params = {
         "subject": subject,

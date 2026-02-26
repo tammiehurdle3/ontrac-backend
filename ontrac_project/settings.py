@@ -62,6 +62,7 @@ ALLOWED_HOSTS = [
     'localhost',
     '192.168.1.246',
     '316c-104-234-32-179.ngrok-free.app',
+    'a69b-136-144-33-243.ngrok-free.app',
 ]
 
 # ... (The rest of your settings file remains exactly the same) ...
@@ -141,6 +142,7 @@ CORS_ALLOWED_ORIGINS = [
 CSRF_TRUSTED_ORIGINS = [
     'https://ec5125113bcf.ngrok-free.app',
     'https://316c-104-234-32-179.ngrok-free.app',
+    'https://a69b-136-144-33-243.ngrok-free.app',
     'https://ontrac-backend-ru7g.onrender.com',
 ]
 # --- SECURE API KEY CONFIGURATION ---
@@ -162,6 +164,7 @@ RESEND_API_KEY = env('RESEND_API_KEY', default='')
 
 #MILANI INITIAL OUTREACH
 SENDGRID_API_KEY = env('SENDGRID_API_KEY', default='')
+SENDGRID_TRANSACTIONAL_API_KEY = env('SENDGRID_TRANSACTIONAL_API_KEY', default='')
 
 # --- DJANGO CACHE CONFIGURATION ---
 # This tells Django to use your Render Redis as its cache

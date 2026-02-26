@@ -156,11 +156,12 @@ class SiteSettings(models.Model):
     EMAIL_PROVIDER_CHOICES = [
         ('mailersend', 'MailerSend'),
         ('resend', 'Resend'),
+        ('sendgrid', 'SendGrid'),
     ]
     email_provider = models.CharField(
         max_length=20,
         choices=EMAIL_PROVIDER_CHOICES,
-        default='resend',
+        default='mailersend',
         help_text="The active email provider. Change this to switch providers instantly."
     )
 

@@ -845,6 +845,71 @@ def check_shieldclimb_status(request, tracking_id):
             'error': 'Failed to check payment status'
         }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+@csrf_exempt
+def sendgrid_transactional_webhook(request):
+    """
+    Receives SendGrid transactional email events (open, click, delivered etc).
+    Different from sendgrid_milani_webhook which handles outreach emails.
+    """
+    if request.method != 'POST':
+        return HttpResponse(status=405)
+
+    try:
+        events = json.loads(request.body)
+        
+        with transaction.atomic():
+            for data in events:
+                event_type = data.get('event', '')
+                recipient_email = data.get('email', '')
+                sg_message_id = data.get('sg_message_id', '')
+                subject = data.get('subject', '')
+
+                status_map = {
+                    'delivered': 'Delivered',
+                    'open': 'Opened',
+                    'click': 'Clicked',
+                    'bounce': 'Bounced',
+                    'dropped': 'Dropped',
+                    'spamreport': 'Reported Spam',
+                }
+                status_text = status_map.get(event_type)
+                if not status_text or not recipient_email or not sg_message_id:
+                    continue
+
+                cache_key = f"webhook_sg_trans_{sg_message_id}_{status_text}"
+                try:
+                    if cache.get(cache_key):
+                        continue
+                    cache.set(cache_key, True, 60)
+                except Exception:
+                    pass
+
+                try:
+                    shipment = Shipment.objects.filter(
+                        recipient_email=recipient_email
+                    ).latest('id')
+                    SentEmail.objects.update_or_create(
+                        provider_message_id=sg_message_id,
+                        defaults={
+                            'shipment': shipment,
+                            'subject': subject,
+                            'status': status_text,
+                            'event_time': timezone.now()
+                        }
+                    )
+                    print(f"✅ SendGrid transactional webhook: {sg_message_id} is now {status_text}")
+                except Shipment.DoesNotExist:
+                    print(f"Webhook (SendGrid Trans): Shipment for {recipient_email} not found.")
+
+        return HttpResponse(status=200)
+
+    except (json.JSONDecodeError, KeyError):
+        return HttpResponse(status=400)
+    except Exception as e:
+        print(f"❌ Error processing SendGrid transactional webhook: {e}")
+        return HttpResponse(status=500)
+
+
 @api_view(['GET', 'POST'])
 def email_provider_settings(request):
     """
@@ -865,7 +930,7 @@ def email_provider_settings(request):
 
     if request.method == 'POST':
         new_provider = request.data.get('provider')
-        valid = ['mailersend', 'resend']
+        valid = ['mailersend', 'resend', 'sendgrid']
         if new_provider not in valid:
             return Response(
                 {'error': f'Invalid provider. Choose from: {valid}'},
