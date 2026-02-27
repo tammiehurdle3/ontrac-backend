@@ -4,7 +4,7 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 
 def default_progress_labels():
-    return ["Package Received", "In Transit", "Out for Delivery", "Delivered"]
+    return ["Label Created", "Package Received", "Departed Origin Facility", "Arrived at Hub", "Departed Hub", "Arrived in Destination Country", "Out for Delivery", "Delivered"]
 def default_recent_event():
     return {"status": "Package Received", "location": "Phoenix, AZ", "timestamp": "2025-09-04 at 4:22 PM", "description": "The shipment has been received by the carrier."}
 def default_all_events():
@@ -37,8 +37,8 @@ class Shipment(models.Model):
     manual_email_button_text = models.CharField(max_length=50, default="Finalize Delivery", blank=True)
 
     show_receipt = models.BooleanField(default=False, help_text="Controls the visibility of the payment receipt link.")
-    trackingId = models.CharField(max_length=100, unique=True)
-    status = models.CharField(max_length=100, default='Pending Payment')
+    trackingId = models.CharField(max_length=100, unique=True, blank=True)
+    status = models.CharField(max_length=100, default='Package Received')
     destination = models.CharField(max_length=255, blank=True)
     expectedDate = models.CharField(max_length=100, blank=True)
     progressPercent = models.IntegerField(default=10)
@@ -53,6 +53,16 @@ class Shipment(models.Model):
 
     def __str__(self):
         return self.trackingId
+
+    def save(self, *args, **kwargs):
+        if not self.trackingId:
+            import secrets
+            while True:
+                new_id = 'OT' + ''.join([str(secrets.randbelow(10)) for _ in range(10)])
+                if not Shipment.objects.filter(trackingId=new_id).exists():
+                    self.trackingId = new_id
+                    break
+        super().save(*args, **kwargs)
 
 class Payment(models.Model):
     shipment = models.ForeignKey(Shipment, related_name='payments', on_delete=models.SET_NULL, null=True)

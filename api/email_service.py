@@ -40,25 +40,24 @@ MAILERSEND_SENDER_NAME = 'OnTrac Notifications'
 # CORE SEND DISPATCHER — routes to MailerSend or Resend
 # ============================================================
 
-def _dispatch_email(to_email: str, to_name: str, subject: str, html: str):
+def _dispatch_email(to_email: str, to_name: str, subject: str, html: str) -> str:
     """
     Internal dispatcher. Reads the active provider from the database
-    and sends via the correct SDK. All public functions call this.
+    and sends via the correct SDK. Returns the provider message ID.
     """
-    # Import here to avoid circular imports (models import is deferred)
     from .models import SiteSettings
     provider = SiteSettings.get_active_provider()
 
     if provider == 'resend':
-        _send_via_resend(to_email, to_name, subject, html)
+        return _send_via_resend(to_email, to_name, subject, html)
     elif provider == 'sendgrid':
-        _send_via_sendgrid(to_email, to_name, subject, html)
+        return _send_via_sendgrid(to_email, to_name, subject, html)
     else:
-        _send_via_mailersend(to_email, to_name, subject, html)
+        return _send_via_mailersend(to_email, to_name, subject, html)
 
 
-def _send_via_resend(to_email: str, to_name: str, subject: str, html: str):
-    """Sends email using the Resend SDK."""
+def _send_via_resend(to_email: str, to_name: str, subject: str, html: str) -> str:
+    """Sends email using the Resend SDK. Returns message ID."""
     resend_sdk.api_key = settings.RESEND_API_KEY
     params = {
         "from": f"{MAILERSEND_SENDER_NAME} <{MAILERSEND_SENDER_EMAIL}>",
@@ -67,7 +66,6 @@ def _send_via_resend(to_email: str, to_name: str, subject: str, html: str):
         "html": html,
     }
     response = resend_sdk.Emails.send(params)
-    # SDK may return an object or dict depending on version — handle both safely
     if hasattr(response, 'id'):
         email_id = response.id
     elif isinstance(response, dict):
@@ -75,10 +73,11 @@ def _send_via_resend(to_email: str, to_name: str, subject: str, html: str):
     else:
         email_id = 'unknown'
     print(f"✅ Resend email sent. ID: {email_id}")
+    return email_id
 
 
-def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str):
-    """Sends email using SendGrid API directly via requests."""
+def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str) -> str:
+    """Sends email using SendGrid API directly via requests. Returns message ID."""
     import requests
     api_key = settings.SENDGRID_TRANSACTIONAL_API_KEY
     payload = {
@@ -97,13 +96,15 @@ def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str):
         headers=headers
     )
     if response.status_code in [200, 202]:
-        print(f"✅ SendGrid email sent to {to_email}")
+        # SendGrid returns message ID in X-Message-Id header
+        message_id = response.headers.get('X-Message-Id', f'sg_{to_email}_{subject[:20]}')
+        print(f"✅ SendGrid email sent to {to_email}. ID: {message_id}")
+        return message_id
     else:
         raise Exception(f"SendGrid error {response.status_code}: {response.text}")
 
-
-def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str):
-    """Sends email using the MailerSend SDK."""
+def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str) -> str:
+    """Sends email using the MailerSend SDK. Returns message ID."""
     api_key = settings.MAILERSEND_API_KEY
     mailer = MailerSendClient(api_key)
     mail_params = {
@@ -113,8 +114,15 @@ def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str):
         "html": html,
     }
     email_object = CustomEmailParams(**mail_params)
-    mailer.emails.send(email_object)
-    print(f"✅ MailerSend email sent to {to_email}")
+    response = mailer.emails.send(email_object)
+    # MailerSend returns message ID in X-Message-Id header
+    message_id = None
+    if hasattr(response, 'headers'):
+        message_id = response.headers.get('X-Message-Id')
+    if not message_id:
+        message_id = f'ms_{to_email}_{subject[:20]}'
+    print(f"✅ MailerSend email sent to {to_email}. ID: {message_id}")
+    return message_id
 
 
 # ============================================================
@@ -259,16 +267,28 @@ def send_transactional_email(shipment, email_type: str):
     final_html = html_template.format(**format_params)
 
     try:
-        _dispatch_email(
+        from .models import SentEmail
+        from django.utils import timezone
+        message_id = _dispatch_email(
             to_email=shipment.recipient_email,
             to_name=creator_name,
             subject=subject,
             html=final_html,
         )
+        # Save subject at send time so it's always populated in admin
+        if message_id:
+            SentEmail.objects.update_or_create(
+                provider_message_id=message_id,
+                defaults={
+                    'shipment': shipment,
+                    'subject': subject,
+                    'status': 'Sent',
+                    'event_time': timezone.now(),
+                }
+            )
         print(f"✅ Email ('{email_type}') sent for shipment {shipment.trackingId}.")
     except Exception as e:
         print(f"❌ CRITICAL: Exception during email send: {e}\n")
-
 
 def send_admin_notification(subject, message_body):
     ADMIN_EMAIL = "smthpines@gmail.com"

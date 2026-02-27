@@ -15,6 +15,42 @@ from .views import convert_to_usd
 import uuid
 from django.db.models import Case, When, Value  
 from django.utils.html import format_html
+from django import forms
+from django.utils.safestring import mark_safe
+
+class TrackingIdWidget(forms.TextInput):
+    """Custom widget that renders the trackingId field with a sleek Generate button."""
+    def render(self, name, value, attrs=None, renderer=None):
+        html = super().render(name, value, attrs, renderer)
+        input_id = (attrs or {}).get('id', f'id_{name}')
+        button = f'''
+        <button type="button"
+            onclick="(function(){{
+                var a = new Uint8Array(10);
+                crypto.getRandomValues(a);
+                var digits = Array.from(a).map(function(b){{ return b % 10; }}).join('');
+                document.getElementById('{input_id}').value = 'OT' + digits;
+            }})()"
+            style="margin-left:10px; padding:6px 16px; background:#417690;
+                   color:#fff; border:none; border-radius:4px; cursor:pointer;
+                   font-size:12px; font-weight:600; vertical-align:middle;
+                   letter-spacing:0.5px; transition:background .2s;"
+            onmouseover="this.style.background='#2b5068'"
+            onmouseout="this.style.background='#417690'">
+            ⟳ Generate ID
+        </button>
+        '''
+        return mark_safe(html + button)
+
+
+class ShipmentAdminForm(forms.ModelForm):
+    class Meta:
+        model = Shipment
+        fields = '__all__'
+        widgets = {
+            'trackingId': TrackingIdWidget(attrs={'style': 'width:200px; font-family:monospace; font-size:14px; font-weight:600;'}),
+        }
+
 # ===================================================================
 #  1. DEFINE THE ADMIN ACTION FUNCTION FIRST
 # ===================================================================
@@ -103,6 +139,7 @@ class SentEmailInline(admin.TabularInline):
 
 @admin.register(Shipment)
 class ShipmentAdmin(admin.ModelAdmin):
+    form = ShipmentAdminForm
     list_display = ('trackingId', 'recipient_name', 'recipient_email', 'colored_status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId', 'recipient_name', 'recipient_email')
     inlines = [PaymentInline, SentEmailInline]
