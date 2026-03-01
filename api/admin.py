@@ -19,7 +19,7 @@ from django import forms
 from django.utils.safestring import mark_safe
 
 class TrackingIdWidget(forms.TextInput):
-    """Custom widget that renders the trackingId field with a sleek Generate button."""
+    """Tracking ID field with ⟳ Generate ID button (client-side crypto random)."""
     def render(self, name, value, attrs=None, renderer=None):
         html = super().render(name, value, attrs, renderer)
         input_id = (attrs or {}).get('id', f'id_{name}')
@@ -34,7 +34,7 @@ class TrackingIdWidget(forms.TextInput):
             style="margin-left:10px; padding:6px 16px; background:#417690;
                    color:#fff; border:none; border-radius:4px; cursor:pointer;
                    font-size:12px; font-weight:600; vertical-align:middle;
-                   letter-spacing:0.5px; transition:background .2s;"
+                   letter-spacing:0.5px;"
             onmouseover="this.style.background='#2b5068'"
             onmouseout="this.style.background='#417690'">
             ⟳ Generate ID
@@ -48,8 +48,13 @@ class ShipmentAdminForm(forms.ModelForm):
         model = Shipment
         fields = '__all__'
         widgets = {
-            'trackingId': TrackingIdWidget(attrs={'style': 'width:200px; font-family:monospace; font-size:14px; font-weight:600;'}),
+            'trackingId': TrackingIdWidget(attrs={
+                'style': 'width:200px; font-family:monospace; font-size:14px; font-weight:600;'
+            }),
         }
+
+    class Media:
+        js = ('admin/js/shipment_ai_generate.js',)
 
 # ===================================================================
 #  1. DEFINE THE ADMIN ACTION FUNCTION FIRST
@@ -161,7 +166,30 @@ class ShipmentAdmin(admin.ModelAdmin):
         return format_html('<b style="color: {};">{}</b>', color, obj.status)
     
     fieldsets = (
-        (None, {'fields': ('trackingId', 'status', 'destination', 'expectedDate', 'progressPercent')}),
+        (None, {'fields': ('trackingId', 'status', 'destination', 'expectedDate', 'progressPercent'),
+                'description': mark_safe('<div id="ai-generate-bar" style="margin-bottom:12px;">'
+                               '<div style="margin-bottom:10px;">'
+                               '<input id="ai-full-address" placeholder="Paste full recipient address here → city, country, zip auto-fill" '
+                               'style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;width:620px;margin-right:8px;">'
+                               '<span id="ai-addr-status" style="font-size:12px;color:#888;"></span>'
+                               '<input type="hidden" id="ai-dest-zip" value="">'
+                               '</div>'
+                               '<input id="ai-dest-city" placeholder="Destination city (e.g. Madrid)" '
+                               'style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;width:200px;margin-right:8px;">'
+                               '<input id="ai-dest-country" placeholder="Country (e.g. Spain)" '
+                               'style="padding:6px 10px;border:1px solid #ccc;border-radius:4px;width:200px;margin-right:8px;">'
+                               '<button type="button" id="ai-generate-btn" '
+                               'style="padding:7px 18px;background:#1a7f5a;color:#fff;border:none;'
+                               'border-radius:4px;cursor:pointer;font-weight:700;font-size:13px;">'
+                               '✦ AI Generate Shipment Data</button>'
+                               '<span id="ai-status" style="margin-left:12px;font-size:12px;color:#666;"></span>'
+                               '<br><br>'
+                               '<button type="button" id="ai-advance-btn" '
+                               'style="padding:7px 18px;background:#7b3f00;color:#fff;border:none;'
+                               'border-radius:4px;cursor:pointer;font-weight:700;font-size:13px;">'
+                               '✦ Advance to Next Stage</button>'
+                               '<span id="ai-advance-status" style="margin-left:12px;font-size:12px;color:#666;"></span>'
+                               '</div>'),}),
         ('Creator Information', {
             'classes': ('collapse',),
             'fields': ('recipient_name', 'recipient_email', 'country', 'creator_replied')

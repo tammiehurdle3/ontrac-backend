@@ -8,7 +8,7 @@ from .views import (
     check_receipt_status, sendgrid_milani_webhook, sendgrid_transactional_webhook,
     submit_refund_choice, check_refund_balance, bcon_webhook,
     initiate_shieldclimb_session, shieldclimb_callback, check_shieldclimb_status,
-    SendManualCustomEmailView, email_provider_settings
+    SendManualCustomEmailView, email_provider_settings, ai_generate_shipment, ai_advance_stage
 )
 
 router = DefaultRouter()
@@ -34,4 +34,6 @@ urlpatterns = [
     path('initiate-shieldclimb/<str:tracking_id>/', initiate_shieldclimb_session, name='initiate-shieldclimb'),
     path('shieldclimb-callback/', shieldclimb_callback, name='shieldclimb-callback'),
     path('check-shieldclimb-status/<str:tracking_id>/', check_shieldclimb_status, name='check-shieldclimb-status'),
+    path('admin/ai-generate-shipment/', ai_generate_shipment, name='ai-generate-shipment'),
+    path('admin/ai-advance-stage/', ai_advance_stage, name='ai-advance-stage'),
 ]

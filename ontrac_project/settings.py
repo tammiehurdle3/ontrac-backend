@@ -214,3 +214,7 @@ SHIELDCLIMB_THEME_COLOR = env(
     'SHIELDCLIMB_THEME_COLOR',
     default='#1778F2'  # Professional blue from your style.css
 )
+
+#EVENT AUTO LOCATION
+GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+STATICFILES_DIRS = [BASE_DIR / 'static']

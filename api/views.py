@@ -16,6 +16,7 @@ from django.conf import settings  # Added missing import
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import SiteSettings 
+from .ai_shipment_generator import generate_shipment_data, smart_advance_shipment
 
 # Re-initialize Pusher so the webhooks can trigger UI updates
 pusher_client = pusher.Pusher(
@@ -942,3 +943,62 @@ def email_provider_settings(request):
             'message': f'Email provider switched to {new_provider} successfully.',
             'active_provider': new_provider
         })
+
+@csrf_exempt
+@api_view(['POST'])
+def ai_generate_shipment(request):
+    """
+    Called by the ✦ AI Generate button in the admin form.
+    Expects: { "destination_city": "Lagos", "destination_country": "Nigeria" }
+    Returns: full shipment data JSON ready to populate form fields.
+    Admin-only.
+    """
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    destination_city = request.data.get('destination_city', '').strip()
+    destination_country = request.data.get('destination_country', '').strip()
+
+    if not destination_city or not destination_country:
+        return Response(
+            {'error': 'Both destination_city and destination_country are required.'},
+            status=status.HTTP_400_BAD_REQUEST
+        )
+
+    try:
+        result = generate_shipment_data(destination_city, destination_country)
+        if result['success']:
+            return Response({'success': True, 'data': result['data']}, status=status.HTTP_200_OK)
+        else:
+            return Response({'success': False, 'error': result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except ValueError as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+    except Exception as e:
+        logger.error(f"AI generate error: {e}")
+        return Response({'error': 'Unexpected error. Check server logs.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+@csrf_exempt
+@api_view(['POST'])
+def ai_advance_stage(request):
+    """
+    Advances an existing shipment to its next logical stage.
+    Expects: { "current_data": { ...full shipment fields... } }
+    Returns: updated shipment data with new event appended.
+    Admin-only.
+    """
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    current_data = request.data.get('current_data')
+    if not current_data:
+        return Response({'error': 'current_data is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        result = smart_advance_shipment(current_data)
+        if result['success']:
+            return Response({'success': True, 'data': result['data'], 'stages_filled': result.get('stages_filled', 1), 'message': result.get('message', '')}, status=status.HTTP_200_OK)
+        else:
+            return Response({'success': False, 'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+    except Exception as e:
+        logger.error(f"AI advance stage error: {e}")
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

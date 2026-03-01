@@ -182,8 +182,25 @@ class SiteSettings(models.Model):
     def __str__(self):
         return f"Site Settings (Active Provider: {self.email_provider})"
 
+    AI_PROVIDER_CHOICES = [
+        ('auto', 'Auto — Gemini 2.5 Flash → Gemini 2.0 Flash Lite → Local'),
+        ('local_only', 'Local Only — No API calls (unlimited, instant)'),
+    ]
+    ai_provider = models.CharField(
+        max_length=20,
+        choices=AI_PROVIDER_CHOICES,
+        default='auto',
+        help_text="Controls AI engine for shipment generation. Auto tries Gemini first, falls back to local if rate limited."
+    )
+
     @classmethod
     def get_active_provider(cls):
         """Returns the currently active email provider string."""
         settings_obj, _ = cls.objects.get_or_create(pk=1)
         return settings_obj.email_provider
+
+    @classmethod
+    def get_ai_provider(cls):
+        """Returns the currently active AI provider setting."""
+        settings_obj, _ = cls.objects.get_or_create(pk=1)
+        return settings_obj.ai_provider
