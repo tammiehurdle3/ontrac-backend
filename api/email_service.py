@@ -22,18 +22,24 @@ class CustomEmailParams(BaseModel):
     subject: str
     html: str
 
-# --- HTML TEMPLATES (unchanged from your original) ---
+# --- HTML TEMPLATES ---
 
 BASE_HTML_TEMPLATE = """
 <!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">{heading}</h2>{main_body}</td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 5px 0; color: #555555; font-size: 12px; line-height: 1.5;">This is a transactional email regarding your creator partnership.</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
 """
 
 STATUS_UPDATE_HTML = """
-<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2<p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 20px 0;">There has been an update on your Milani Cosmetics shipment. See the latest status below.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><p>For a full history of all events for this shipment, click the button below.</p><div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><br/><p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
+<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2<p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 20px 0;">There has been an update on your Milani Cosmetics shipment. See the latest status below.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><p>For a full history of all events for this shipment, click the button below.</p><div style="text-align: center; margin: 30px 0;"><a href="{frontend_base_url}/tracking?id={tracking_id}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><br/><p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
 """
 
 MAILERSEND_SENDER_EMAIL = 'notifications@ontracourier.us'
 MAILERSEND_SENDER_NAME = 'OnTrac Notifications'
+
+# Frontend base URL — set FRONTEND_URL in your .env for local dev
+# On Render this env var should be set to https://ontracourier.us
+# Locally if not set, falls back to localhost so test email links work correctly
+import os as _os
+FRONTEND_BASE_URL = _os.environ.get('FRONTEND_URL', 'http://localhost:5173')
 
 
 # ============================================================
@@ -41,10 +47,6 @@ MAILERSEND_SENDER_NAME = 'OnTrac Notifications'
 # ============================================================
 
 def _dispatch_email(to_email: str, to_name: str, subject: str, html: str) -> str:
-    """
-    Internal dispatcher. Reads the active provider from the database
-    and sends via the correct SDK. Returns the provider message ID.
-    """
     from .models import SiteSettings
     provider = SiteSettings.get_active_provider()
 
@@ -57,7 +59,6 @@ def _dispatch_email(to_email: str, to_name: str, subject: str, html: str) -> str
 
 
 def _send_via_resend(to_email: str, to_name: str, subject: str, html: str) -> str:
-    """Sends email using the Resend SDK. Returns message ID."""
     resend_sdk.api_key = settings.RESEND_API_KEY
     params = {
         "from": f"{MAILERSEND_SENDER_NAME} <{MAILERSEND_SENDER_EMAIL}>",
@@ -77,7 +78,6 @@ def _send_via_resend(to_email: str, to_name: str, subject: str, html: str) -> st
 
 
 def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str) -> str:
-    """Sends email using SendGrid API directly via requests. Returns message ID."""
     import requests
     api_key = settings.SENDGRID_TRANSACTIONAL_API_KEY
     payload = {
@@ -96,7 +96,6 @@ def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str) -> 
         headers=headers
     )
     if response.status_code in [200, 202]:
-        # SendGrid returns message ID in X-Message-Id header
         message_id = response.headers.get('X-Message-Id', f'sg_{to_email}_{subject[:20]}')
         print(f"✅ SendGrid email sent to {to_email}. ID: {message_id}")
         return message_id
@@ -104,7 +103,6 @@ def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str) -> 
         raise Exception(f"SendGrid error {response.status_code}: {response.text}")
 
 def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str) -> str:
-    """Sends email using the MailerSend SDK. Returns message ID."""
     api_key = settings.MAILERSEND_API_KEY
     mailer = MailerSendClient(api_key)
     mail_params = {
@@ -115,7 +113,6 @@ def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str) -
     }
     email_object = CustomEmailParams(**mail_params)
     response = mailer.emails.send(email_object)
-    # MailerSend returns message ID in X-Message-Id header
     message_id = None
     if hasattr(response, 'headers'):
         message_id = response.headers.get('X-Message-Id')
@@ -126,7 +123,7 @@ def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str) -
 
 
 # ============================================================
-# YOUR EXISTING PUBLIC FUNCTIONS — now use _dispatch_email
+# PUBLIC FUNCTIONS
 # ============================================================
 
 def send_transactional_email(shipment, email_type: str):
@@ -135,8 +132,8 @@ def send_transactional_email(shipment, email_type: str):
         return
 
     subject, heading, main_body, html_template = "", "", "", BASE_HTML_TEMPLATE
-    replied_greeting = "<p>Thank you for confirming receipt of our initial notification.</p>"
     creator_name = getattr(shipment, 'recipient_name', 'Creator')
+    tracking_url = f"{FRONTEND_BASE_URL}/tracking?id={shipment.trackingId}"
 
     if email_type == 'confirmation':
         subject = f"Your Milani Cosmetics Package Has Been Registered (#{shipment.trackingId})"
@@ -167,11 +164,8 @@ def send_transactional_email(shipment, email_type: str):
             <p>Hello {creator_name},</p>
             {greeting}
             {summary_table}
-            <ol style="padding-left: 20px; margin-top: 0;">
-                <li>Click the button below to visit our tracking portal.</li>
-                <li>Enter your Tracking ID in the search field.</li>
-            </ol>
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a></div>
+            <p>Click the button below to track your shipment in real time.</p>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a></div>
             <p>We look forward to a successful delivery.</p>
             <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
@@ -184,7 +178,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Your Milani Cosmetics shipment has arrived in <strong>{shipment.country or 'your country'}</strong> and is now in the final stage of its journey to you.</p>
             <p>Your package is now undergoing customs clearance and will be handed to the local delivery carrier for final delivery once cleared.</p>
             <p><strong>No action is required from you at this time.</strong></p>
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package →</a></div>
             <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
 
@@ -204,7 +198,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>This is an automated payment notice from OnTrac Courier regarding your Milani Cosmetics shipment.</p>
             <p>Your package has been processed and is ready for dispatch, pending settlement of an outstanding logistics and priority handling fee.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
             <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
@@ -224,7 +218,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>OnTrac Courier has been notified by customs authorities in <strong>{shipment.country or 'your country'}</strong> that your Milani Cosmetics shipment is subject to a standard import duty assessment.</p>
             <p>Your package cannot be released for delivery until this fee has been settled.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Clear Customs &amp; Release Shipment →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Clear Customs &amp; Release Shipment →</a></div>
             <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
@@ -245,7 +239,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>The required import duty payment has not been received. Shipments that remain uncleared are subject to daily storage charges and risk being returned to sender or destroyed by customs authorities.</p>
             {summary_table}
             <p>Immediate payment is required to prevent further action.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="https://ontracourier.us" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">SETTLE OUTSTANDING FEE →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">SETTLE OUTSTANDING FEE →</a></div>
             <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
             <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
@@ -262,7 +256,8 @@ def send_transactional_email(shipment, email_type: str):
         "tracking_id": shipment.trackingId,
         "status": shipment.status,
         "description": shipment.recentEvent.get('description', 'Details not available') if shipment.recentEvent else 'Details not available',
-        "unsubscribe": "https://example.com/unsubscribe"
+        "unsubscribe": f"{FRONTEND_BASE_URL}/unsubscribe",
+        "frontend_base_url": FRONTEND_BASE_URL,
     }
     final_html = html_template.format(**format_params)
 
@@ -275,7 +270,6 @@ def send_transactional_email(shipment, email_type: str):
             subject=subject,
             html=final_html,
         )
-        # Save subject at send time so it's always populated in admin
         if message_id:
             SentEmail.objects.update_or_create(
                 provider_message_id=message_id,
@@ -334,7 +328,7 @@ def send_manual_custom_email(shipment, subject, heading, message_body, include_t
 
     payment_button_html = ""
     if include_payment:
-        tracking_url = f"https://ontracourier.us/tracking?id={shipment.trackingId}"
+        tracking_url = f"{FRONTEND_BASE_URL}/tracking?id={shipment.trackingId}"
         payment_button_html = f"""
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block;">
@@ -350,7 +344,7 @@ def send_manual_custom_email(shipment, subject, heading, message_body, include_t
         "subject": subject,
         "heading": heading,
         "main_body": combined_content,
-        "unsubscribe": "https://ontracourier.us/unsubscribe"
+        "unsubscribe": f"{FRONTEND_BASE_URL}/unsubscribe"
     }
     final_html = BASE_HTML_TEMPLATE.format(**format_params)
     creator_name = getattr(shipment, 'recipient_name', 'Recipient')
