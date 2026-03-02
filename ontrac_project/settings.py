@@ -135,7 +135,10 @@ CORS_ALLOWED_ORIGINS = [
     "https://www.ontracourier.us",
     "https://ontracourier.us",
     "https://zesty-klepon-86a44e.netlify.app",
-    "https://ontrac-react.netlify.app"
+    "https://ontrac-react.netlify.app",
+    "https://dashboard.tawk.to",
+
+
 ]
 # --- START: New setting for Webhook Security ---
 # This tells Django to trust POST requests coming from your ngrok URL
