@@ -218,7 +218,11 @@ class ShipmentAdmin(admin.ModelAdmin):
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
-            'fields': ('progressLabels', 'recentEvent', 'allEvents', 'shipmentDetails')
+            'fields': (
+                'destination_city', 'destination_country',
+                'current_stage_key', 'current_stage_index',
+                'progressLabels', 'recentEvent', 'allEvents', 'shipmentDetails',
+            )
         }),
     )
 

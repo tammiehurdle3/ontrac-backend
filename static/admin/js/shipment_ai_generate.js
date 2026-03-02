@@ -1,284 +1,491 @@
-/**
+/*
  * static/admin/js/shipment_ai_generate.js
  *
- * Handles:
- *  1. Address parser — paste full address, auto-fills city/country/zip
- *  2. AI Generate Shipment Data button
- *  3. Advance to Next Stage button (with catch-up support)
+ * Handles three things on the Shipment admin form:
+ *   1. ✦ AI Generate Shipment Data  — new shipment from scratch
+ *   2. ✦ Advance to Next Stage      — go to next stage automatically
+ *   3. Stage Selector Panel         — visual list of all stages, click any to jump
+ *
+ * Drop this file in:  api/static/admin/js/shipment_ai_generate.js
+ * Reference it from admin.py via:  js = ['admin/js/shipment_ai_generate.js']
  */
 
 (function () {
-    "use strict";
+  "use strict";
 
-    // ─── CSRF ────────────────────────────────────────────────────────────────
-    function getCookie(name) {
-        let val = null;
-        document.cookie.split(';').forEach(function (c) {
-            c = c.trim();
-            if (c.startsWith(name + '=')) val = decodeURIComponent(c.slice(name.length + 1));
-        });
-        return val;
-    }
+  const API_BASE = window.location.origin;
 
-    // ─── FORM FIELD HELPERS ──────────────────────────────────────────────────
-    function setField(id, value) {
-        var el = document.getElementById(id);
-        if (el && value !== undefined && value !== null) el.value = value;
-    }
+  // ── Utility: get Django admin CSRF token ──────────────────────────────────
+  function getCsrf() {
+    const el = document.querySelector("[name=csrfmiddlewaretoken]");
+    return el ? el.value : "";
+  }
 
-    function getField(id) {
-        var el = document.getElementById(id);
-        return el ? el.value.trim() : '';
-    }
+  // ── Utility: get shipment PK from URL ─────────────────────────────────────
+  function getShipmentPk() {
+    // URL pattern: /admin/api/shipment/42/change/
+    const m = window.location.pathname.match(/\/shipment\/(\d+)\//);
+    return m ? m[1] : null;
+  }
 
-    function setJSON(id, obj) {
-        var el = document.getElementById(id);
-        if (el && obj !== undefined && obj !== null) {
-            el.value = JSON.stringify(obj, null, 2);
-        }
-    }
+  // ── Utility: show status message on a button's sibling span ───────────────
+  function setMsg(msgEl, text, type) {
+    if (!msgEl) return;
+    msgEl.textContent = text;
+    msgEl.style.color = type === "error" ? "#ff6b6b" : type === "success" ? "#51cf66" : "#aaa";
+  }
 
-    function getJSON(id) {
-        var el = document.getElementById(id);
-        if (!el || !el.value.trim()) return null;
-        try { return JSON.parse(el.value); } catch (e) { return null; }
-    }
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTION 0 — Address Parser
+  // Parses "Calle Príncipe de Vergara 132, 4 planta, 28002, Madrid, Spain"
+  // → city: "Madrid", country: "Spain", zip: "28002"
+  // ══════════════════════════════════════════════════════════════════════════
+  // ── Nominatim lookup (OpenStreetMap, free, no API key) ───────────────────
+  var _nominatimTimer = null;
 
-    // ─── POPULATE ALL FIELDS FROM API RESPONSE ───────────────────────────────
-    function populateFields(data) {
-        setField('id_trackingId',      data.trackingId     || '');
-        setField('id_status',          data.status         || '');
-        setField('id_destination',     data.destination    || data.trackingId && '' || '');
-        setField('id_expectedDate',    data.expectedDate   || '');
-        setField('id_progressPercent', data.progressPercent != null ? data.progressPercent : '');
-
-        // destination might come back as separate city+country — build it
-        if (data.destination) {
-            setField('id_destination', data.destination);
-        } else if (data.destinationCity && data.destinationCountry) {
-            setField('id_destination', data.destinationCity + ', ' + data.destinationCountry);
-        }
-
-        setJSON('id_progressLabels',  data.progressLabels);
-        setJSON('id_recentEvent',     data.recentEvent);
-        setJSON('id_allEvents',       data.allEvents);
-        setJSON('id_shipmentDetails', data.shipmentDetails);
-
-        // Fill destination zip into shipmentDetails if we have it from address parser
-        var zip = getField('ai-dest-zip');
-        if (zip) {
-            var sd = getJSON('id_shipmentDetails') || {};
-            sd.destinationZip = zip;
-            setJSON('id_shipmentDetails', sd);
-        }
-    }
-
-    // ─── GENERIC API CALLER ──────────────────────────────────────────────────
-    function callAPI(url, payload, statusEl, onSuccess) {
-        statusEl.style.color = '#888';
-        statusEl.textContent = '⏳ Working...';
-
-        fetch(url, {
-            method:  'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'X-CSRFToken':  getCookie('csrftoken'),
-            },
-            body: JSON.stringify(payload),
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (resp) {
-            if (resp.success) {
-                onSuccess(resp);
-            } else {
-                statusEl.style.color = '#c00';
-                statusEl.textContent = '✗ Error: ' + (resp.error || 'Unknown error');
-            }
-        })
-        .catch(function (err) {
-            statusEl.style.color = '#c00';
-            statusEl.textContent = '✗ Network error: ' + err.message;
-        });
-    }
-
-    // ─── ADDRESS PARSER ──────────────────────────────────────────────────────
-    /**
-     * Parses a pasted full address into city, country, and zip.
-     *
-     * Handles formats like:
-     *   15 Adeola Odeku Street, Victoria Island, Lagos, 101233, Nigeria
-     *   Calle Gran Vía 45, Madrid, 28013, Spain
-     *   123 Main St, Toronto, ON M5V 3A8, Canada
-     *   10 Downing Street, London, SW1A 2AA, United Kingdom
-     */
-    function parseAddress(raw) {
-        var result = { city: '', country: '', zip: '' };
-        if (!raw || !raw.trim()) return result;
-
-        var parts = raw.split(',').map(function (p) { return p.trim(); }).filter(Boolean);
-        if (parts.length < 2) return result;
-
-        // Country is always the last part
-        result.country = parts[parts.length - 1];
-
-        // Find zip: look for a part that is mostly digits or standard postal code pattern
-        var zipPattern = /^[A-Z0-9]{3,10}(\s[A-Z0-9]{3,6})?$/i;
-        var zipIdx = -1;
-        for (var i = parts.length - 2; i >= 1; i--) {
-            var clean = parts[i].replace(/\s+/g, ' ').trim();
-            // Pure digits
-            if (/^\d{4,10}$/.test(clean)) { zipIdx = i; break; }
-            // Postal code mixed (e.g. M5V 3A8, SW1A 2AA)
-            if (zipPattern.test(clean) && clean.length <= 10) { zipIdx = i; break; }
-            // Part that contains digits alongside letters (e.g. "ON M5V 3A8")
-            var zipMatch = clean.match(/\b([A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}|\d{4,6})\b/i);
-            if (zipMatch) { result.zip = zipMatch[1]; zipIdx = i; break; }
-        }
-
-        if (zipIdx !== -1 && !result.zip) {
-            result.zip = parts[zipIdx];
-        }
-
-        // City: the part just before the zip (or 2nd to last before country if no zip)
-        var citySearchEnd = zipIdx !== -1 ? zipIdx : parts.length - 1;
-        // Walk backwards from before zip to find the city
-        // City is usually the last meaningful non-street part
-        for (var j = citySearchEnd - 1; j >= 1; j--) {
-            var candidate = parts[j];
-            // Skip state/province codes (short 2-3 char all caps like "ON", "CA", "NY")
-            if (/^[A-Z]{2,3}$/.test(candidate)) continue;
-            // Skip if it looks like a street (contains digits at start)
-            if (/^\d/.test(candidate)) continue;
-            result.city = candidate;
-            break;
-        }
-
-        // Fallback: if city still empty, use part before country (or before zip)
-        if (!result.city) {
-            var fallbackIdx = zipIdx !== -1 ? zipIdx - 1 : parts.length - 2;
-            if (fallbackIdx >= 0) result.city = parts[fallbackIdx];
-        }
-
-        return result;
-    }
-
-    // ─── INIT ON DOM READY ───────────────────────────────────────────────────
-    document.addEventListener('DOMContentLoaded', function () {
-
-        // ── Address parser input ─────────────────────────────────────────────
-        var addrInput   = document.getElementById('ai-full-address');
-        var cityInput   = document.getElementById('ai-dest-city');
-        var countryInput = document.getElementById('ai-dest-country');
-        var zipInput    = document.getElementById('ai-dest-zip');
-        var addrStatus  = document.getElementById('ai-addr-status');
-
-        if (addrInput) {
-            addrInput.addEventListener('input', function () {
-                var raw    = addrInput.value;
-                var parsed = parseAddress(raw);
-
-                if (parsed.city)    { cityInput.value    = parsed.city;    }
-                if (parsed.country) { countryInput.value = parsed.country; }
-                if (zipInput && parsed.zip) { zipInput.value = parsed.zip; }
-
-                if (addrStatus) {
-                    if (parsed.city && parsed.country) {
-                        addrStatus.style.color = '#1a7f5a';
-                        addrStatus.textContent = '✓ City: ' + parsed.city +
-                            '  Country: ' + parsed.country +
-                            (parsed.zip ? '  ZIP: ' + parsed.zip : '');
-                    } else {
-                        addrStatus.style.color = '#888';
-                        addrStatus.textContent = 'Keep typing...';
-                    }
-                }
-            });
-        }
-
-        // ── AI Generate button ───────────────────────────────────────────────
-        var generateBtn = document.getElementById('ai-generate-btn');
-        var generateStatus = document.getElementById('ai-status');
-
-        if (generateBtn) {
-            generateBtn.addEventListener('click', function () {
-                var city    = cityInput  ? cityInput.value.trim()    : '';
-                var country = countryInput ? countryInput.value.trim() : '';
-
-                if (!city || !country) {
-                    generateStatus.style.color = '#c00';
-                    generateStatus.textContent = '✗ Enter destination city and country first.';
-                    return;
-                }
-
-                callAPI(
-                    '/api/admin/ai-generate-shipment/',
-                    { destination_city: city, destination_country: country },
-                    generateStatus,
-                    function (resp) {
-                        var data = resp.data;
-                        // Set destination field manually since generate doesn't know it
-                        data.destination = city + ', ' + country;
-                        populateFields(data);
-                        generateStatus.style.color = '#1a7f5a';
-                        generateStatus.textContent = '✓ All fields populated. Review then save.';
-                    }
-                );
-            });
-        }
-
-        // ── Advance to Next Stage button ─────────────────────────────────────
-        var advanceBtn    = document.getElementById('ai-advance-btn');
-        var advanceStatus = document.getElementById('ai-advance-status');
-
-        if (advanceBtn) {
-            advanceBtn.addEventListener('click', function () {
-                var trackingId = getField('id_trackingId');
-                if (!trackingId) {
-                    advanceStatus.style.color = '#c00';
-                    advanceStatus.textContent = '✗ Save the shipment first before advancing.';
-                    return;
-                }
-
-                var currentStatus = getField('id_status');
-                if (currentStatus === 'Delivered') {
-                    advanceStatus.style.color = '#c00';
-                    advanceStatus.textContent = '✗ Shipment is already delivered.';
-                    return;
-                }
-
-                // Build current_data from all form fields
-                var current_data = {
-                    trackingId:      trackingId,
-                    status:          currentStatus,
-                    destination:     getField('id_destination'),
-                    expectedDate:    getField('id_expectedDate'),
-                    progressPercent: parseInt(getField('id_progressPercent')) || 15,
-                    progressLabels:  getJSON('id_progressLabels'),
-                    recentEvent:     getJSON('id_recentEvent'),
-                    allEvents:       getJSON('id_allEvents') || [],
-                    shipmentDetails: getJSON('id_shipmentDetails'),
-                };
-
-                callAPI(
-                    '/api/admin/ai-advance-stage/',
-                    { current_data: current_data },
-                    advanceStatus,
-                    function (resp) {
-                        var data = resp.data;
-                        populateFields(data);
-                        advanceStatus.style.color = '#1a7f5a';
-
-                        var msg = '✓ Advanced to: ' + data.status;
-                        if (resp.stages_filled && resp.stages_filled > 1) {
-                            msg = '✓ Caught up ' + resp.stages_filled + ' missed stages → Now: ' + data.status;
-                        }
-                        if (resp.message) msg = '✓ ' + resp.message + ' → ' + data.status;
-                        advanceStatus.textContent = msg + '. Review then save.';
-                    }
-                );
-            });
-        }
-
+  async function lookupAddressNominatim(raw) {
+    var url = "https://nominatim.openstreetmap.org/search?" + new URLSearchParams({
+      q: raw,
+      format: "json",
+      addressdetails: "1",
+      limit: "1",
     });
+    var resp = await fetch(url, {
+      headers: { "Accept-Language": "en", "User-Agent": "OnTracAdminTool/1.0" }
+    });
+    var data = await resp.json();
+    if (!data || !data.length) return null;
+    var addr = data[0].address || {};
+    // Nominatim returns city/town/village/municipality — pick best available
+    var city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
+    var country = addr.country || "";
+    var zip = addr.postcode || "";
+    return { city: city, country: country, zip: zip };
+  }
 
+  function setupAddressParser() {
+    var addrInput    = document.getElementById("ai-full-address");
+    var cityInput    = document.getElementById("ai-dest-city");
+    var countryInput = document.getElementById("ai-dest-country");
+    var zipInput     = document.getElementById("ai-dest-zip");
+    var statusEl     = document.getElementById("ai-addr-status");
+    if (!addrInput || !cityInput || !countryInput) return;
+
+    addrInput.addEventListener("input", function() {
+      var raw = addrInput.value.trim();
+      if (!raw || raw.length < 8) {
+        if (statusEl) { statusEl.style.color = "#888"; statusEl.textContent = "Keep typing…"; }
+        return;
+      }
+
+      // Debounce — wait 600ms after user stops typing before hitting Nominatim
+      clearTimeout(_nominatimTimer);
+      if (statusEl) { statusEl.style.color = "#888"; statusEl.textContent = "⏳ Looking up address…"; }
+
+      _nominatimTimer = setTimeout(async function() {
+        try {
+          var parsed = await lookupAddressNominatim(raw);
+
+          if (!parsed || (!parsed.city && !parsed.country)) {
+            if (statusEl) { statusEl.style.color = "#ff6b6b"; statusEl.textContent = "✗ Address not recognised. Check spelling or enter city/country manually."; }
+            return;
+          }
+
+          if (parsed.city)    cityInput.value    = parsed.city;
+          if (parsed.country) countryInput.value = parsed.country;
+          if (zipInput && parsed.zip) zipInput.value = parsed.zip;
+
+          // Write destinationZip into shipmentDetails JSON field
+          if (parsed.zip) {
+            var sdEl = document.querySelector("#id_shipmentDetails");
+            if (sdEl) {
+              try {
+                var sd = JSON.parse(sdEl.value) || {};
+                sd.destinationZip = parsed.zip;
+                if (!sd.originZip) sd.originZip = "85001";
+                sdEl.value = JSON.stringify(sd, null, 2);
+              } catch(e) {}
+            }
+          }
+
+          if (statusEl) {
+            statusEl.style.color = "#51cf66";
+            statusEl.textContent = "✓ City: " + parsed.city + "  Country: " + parsed.country + (parsed.zip ? "  ZIP: " + parsed.zip : "");
+          }
+
+        } catch(err) {
+          if (statusEl) { statusEl.style.color = "#ff6b6b"; statusEl.textContent = "✗ Lookup failed. Enter fields manually."; }
+        }
+      }, 600);
+    });
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTION 1 — AI Generate Shipment Data button
+  // ══════════════════════════════════════════════════════════════════════════
+  function setupGenerateButton() {
+    const btn = document.getElementById("ai-generate-btn");
+    if (!btn) return;
+    // Status element is id="ai-status" in admin.py HTML
+    const msgEl = document.getElementById("ai-status");
+
+    btn.addEventListener("click", async function () {
+      // Read from the custom ai-dest-city / ai-dest-country inputs in the description bar
+      const cityInput    = document.getElementById("ai-dest-city");
+      const countryInput = document.getElementById("ai-dest-country");
+      const city    = cityInput    ? cityInput.value.trim()    : "";
+      const country = countryInput ? countryInput.value.trim() : "";
+
+      if (!city || !country) {
+        setMsg(msgEl, "✗ Enter destination city and country first.", "error");
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "Generating...";
+      setMsg(msgEl, "⏳ Working...", "info");
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/admin/ai-generate-shipment/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrf() },
+          body: JSON.stringify({ destination_city: city, destination_country: country }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+          setMsg(msgEl, "✗ " + (data.error || "Generation failed."), "error");
+          return;
+        }
+
+        // resp.data is the actual payload (view wraps in {success, data})
+        const d = data.data || data;
+
+        // Fill form fields
+        _setField("status",            d.status);
+        _setField("destination",       d.destination);
+        _setField("destination_city",  d.destination_city);
+        _setField("destination_country", d.destination_country);
+        _setField("current_stage_key",   d.current_stage_key);
+        _setField("current_stage_index", d.current_stage_index);
+        _setField("progressPercent",     d.progressPercent);
+        _setField("expectedDate",        d.expectedDate);
+        _setJsonField("recentEvent",     d.recentEvent);
+        _setJsonField("allEvents",       d.allEvents);
+        if (d.progressLabels)   _setJsonField("progressLabels",  d.progressLabels);
+        if (d.shipmentDetails) {
+          // Preserve destinationZip already parsed from address input
+          var zipInput = document.getElementById("ai-dest-zip");
+          if (zipInput && zipInput.value) d.shipmentDetails.destinationZip = zipInput.value;
+          _setJsonField("shipmentDetails", d.shipmentDetails);
+        }
+
+        // Update requiresPayment checkbox
+        const reqPay = document.querySelector("#id_requiresPayment");
+        if (reqPay && reqPay.type === "checkbox") reqPay.checked = !!d.requiresPayment;
+
+        setMsg(msgEl, "✓ All fields populated. Review then save.", "success");
+
+        // Refresh the stage panel if on existing shipment
+        const pk = getShipmentPk();
+        if (pk) loadStagePanel(pk);
+
+      } catch (err) {
+        setMsg(msgEl, "✗ Network error: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "✦ AI Generate Shipment Data";
+      }
+    });
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTION 2 — Advance to Next Stage button
+  // ══════════════════════════════════════════════════════════════════════════
+  function setupAdvanceButton() {
+    const btn = document.getElementById("ai-advance-btn");
+    if (!btn) return;
+    // Status element is id="ai-advance-status" in admin.py HTML
+    const msgEl = document.getElementById("ai-advance-status");
+    const pk = getShipmentPk();
+
+    if (!pk) {
+      btn.disabled = true;
+      setMsg(msgEl, "Save shipment first to use Advance.", "info");
+      return;
+    }
+
+    btn.addEventListener("click", async function () {
+      btn.disabled = true;
+      btn.textContent = "Advancing...";
+      setMsg(msgEl, "Processing...", "info");
+
+      try {
+        const resp = await fetch(`${API_BASE}/api/admin/ai-advance-stage/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrf() },
+          body: JSON.stringify({ shipment_id: parseInt(pk) }),
+        });
+        const data = await resp.json();
+
+        if (!resp.ok || data.error) {
+          setMsg(msgEl, data.error || "Advance failed.", "error");
+          return;
+        }
+
+        // View wraps result in {success, data, stages_filled, message}
+        const d = data.data || data;
+        applyStageData(d);
+        const stagesFilled = d._stages_added || data.stages_filled || 1;
+        const label = d._jumped_to_label || data.message || d.status || "";
+        const skipped = stagesFilled > 1 ? `Caught up ${stagesFilled} stages → ` : "";
+        setMsg(msgEl, `✓ ${skipped}${label}. Review then save.`, "success");
+
+        // Refresh stage panel
+        loadStagePanel(pk);
+
+      } catch (err) {
+        setMsg(msgEl, "Network error: " + err.message, "error");
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "✦ Advance to Next Stage";
+      }
+    });
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTION 3 — Visual Stage Selector Panel
+  // ══════════════════════════════════════════════════════════════════════════
+  function buildStagePanelContainer() {
+    // Only build on existing shipment pages
+    const pk = getShipmentPk();
+    if (!pk) return;
+
+    // Find the advance button row and insert panel below it
+    const advanceBtn = document.getElementById("ai-advance-btn");
+    if (!advanceBtn) return;
+
+    const wrapper = advanceBtn.closest(".field-box, .form-row, td, div") || advanceBtn.parentElement;
+
+    const panel = document.createElement("div");
+    panel.id = "stage-selector-panel";
+    panel.style.cssText = `
+      margin-top: 14px;
+      padding: 14px 16px;
+      background: #1a1a2e;
+      border: 1px solid #333;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 12px;
+    `;
+    panel.innerHTML = `
+      <div style="color:#888; margin-bottom:10px; font-size:11px; letter-spacing:1px; text-transform:uppercase;">
+        Stage Selector — Click any stage to jump directly
+      </div>
+      <div id="stage-list" style="display:flex; flex-direction:column; gap:4px;"></div>
+      <div id="stage-panel-msg" style="margin-top:8px; font-size:11px; color:#aaa;"></div>
+    `;
+
+    wrapper.insertAdjacentElement("afterend", panel);
+    loadStagePanel(pk);
+  }
+
+  async function loadStagePanel(pk) {
+    const listEl = document.getElementById("stage-list");
+    if (!listEl) return;
+
+    listEl.innerHTML = `<div style="color:#666; padding:6px;">Loading stages...</div>`;
+
+    try {
+      const resp = await fetch(`${API_BASE}/api/admin/ai-stage-pipeline/?shipment_id=${pk}`);
+      const data = await resp.json();
+
+      if (!resp.ok || data.error) {
+        listEl.innerHTML = `<div style="color:#ff6b6b;">Could not load stages: ${data.error || "unknown error"}</div>`;
+        return;
+      }
+
+      renderStageList(listEl, data.pipeline, pk);
+
+    } catch (err) {
+      listEl.innerHTML = `<div style="color:#ff6b6b;">Network error loading stages.</div>`;
+    }
+  }
+
+  function renderStageList(listEl, pipeline, pk) {
+    listEl.innerHTML = "";
+
+    pipeline.forEach(function (stage) {
+      const row = document.createElement("div");
+
+      let bgColor = "transparent";
+      let textColor = "#555";
+      let border = "1px solid #2a2a2a";
+      let cursor = "pointer";
+      let icon = "○";
+
+      if (stage.is_completed) {
+        textColor = "#51cf66";
+        icon = "✓";
+        border = "1px solid #2a3a2a";
+        bgColor = "#0d1f0d";
+      } else if (stage.is_current) {
+        textColor = "#ffd43b";
+        icon = "►";
+        border = "1px solid #4a3a00";
+        bgColor = "#1f1a00";
+        cursor = "default";
+      } else if (stage.requires_payment) {
+        textColor = "#ff8c42";
+        icon = "$";
+      }
+
+      row.style.cssText = `
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 5px 10px;
+        border-radius: 5px;
+        background: ${bgColor};
+        border: ${border};
+        color: ${textColor};
+        cursor: ${cursor};
+        transition: background 0.15s;
+      `;
+
+      const indexBadge = document.createElement("span");
+      indexBadge.style.cssText = "width:18px; text-align:center; opacity:0.5; font-size:10px; flex-shrink:0;";
+      indexBadge.textContent = stage.index + 1;
+
+      const iconSpan = document.createElement("span");
+      iconSpan.style.cssText = "width:14px; text-align:center; flex-shrink:0;";
+      iconSpan.textContent = icon;
+
+      const labelSpan = document.createElement("span");
+      labelSpan.style.cssText = "flex:1;";
+      labelSpan.textContent = stage.label;
+
+      const locSpan = document.createElement("span");
+      locSpan.style.cssText = "opacity:0.45; font-size:10px; max-width:200px; text-align:right; overflow:hidden; white-space:nowrap; text-overflow:ellipsis;";
+      locSpan.textContent = stage.location;
+
+      row.appendChild(indexBadge);
+      row.appendChild(iconSpan);
+      row.appendChild(labelSpan);
+      row.appendChild(locSpan);
+
+      // Hover effect for future stages
+      if (stage.is_future) {
+        row.addEventListener("mouseenter", function () {
+          row.style.background = "#1a1a3a";
+          row.style.borderColor = "#444";
+          row.style.color = "#ccc";
+        });
+        row.addEventListener("mouseleave", function () {
+          row.style.background = "transparent";
+          row.style.borderColor = "#2a2a2a";
+          row.style.color = textColor;
+        });
+
+        row.addEventListener("click", function () {
+          jumpToStage(pk, stage.key, stage.label);
+        });
+      }
+
+      listEl.appendChild(row);
+    });
+  }
+
+  async function jumpToStage(pk, stageKey, stageLabel) {
+    const msgEl = document.getElementById("stage-panel-msg");
+    const advanceMsgEl = document.getElementById("ai-advance-status");
+
+    setMsg(msgEl, `Jumping to "${stageLabel}"...`, "info");
+
+    try {
+      const resp = await fetch(`${API_BASE}/api/admin/ai-advance-stage/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-CSRFToken": getCsrf() },
+        body: JSON.stringify({ shipment_id: parseInt(pk), target_stage_key: stageKey }),
+      });
+      const data = await resp.json();
+
+      if (!resp.ok || data.error) {
+        setMsg(msgEl, "Error: " + (data.error || "failed"), "error");
+        return;
+      }
+
+      // View wraps result in {success, data, stages_filled, message}
+      const d = data.data || data;
+      applyStageData(d);
+      const stagesFilled = d._stages_added || data.stages_filled || 1;
+      const skipped = stagesFilled > 1 ? ` (filled ${stagesFilled} intermediate stages)` : "";
+      setMsg(msgEl, `✓ Jumped to "${stageLabel}"${skipped}. Review then save.`, "success");
+      if (advanceMsgEl) setMsg(advanceMsgEl, `✓ → ${stageLabel}. Review then save.`, "success");
+
+      // Re-render panel
+      loadStagePanel(pk);
+
+    } catch (err) {
+      setMsg(msgEl, "Network error: " + err.message, "error");
+    }
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // SECTION 4 — Shared helpers
+  // ══════════════════════════════════════════════════════════════════════════
+
+  function applyStageData(d) {
+    // d is the inner result dict from advance_shipment_stage()
+    _setField("status",              d.status);
+    _setField("current_stage_key",   d.current_stage_key);
+    _setField("current_stage_index", d.current_stage_index);
+    _setField("progressPercent",     d.progressPercent);
+    _setJsonField("recentEvent",     d.recentEvent);
+    _setJsonField("allEvents",       d.allEvents);
+    if (d.progressLabels) _setJsonField("progressLabels", d.progressLabels);
+
+    // requiresPayment — handle both checkbox and text field
+    const reqPay = document.querySelector("#id_requiresPayment");
+    if (reqPay) {
+      if (reqPay.type === "checkbox") {
+        reqPay.checked = !!d.requiresPayment;
+      } else {
+        reqPay.value = d.requiresPayment ? "true" : "false";
+      }
+    }
+  }
+
+  function _setField(name, value) {
+    if (value === undefined || value === null) return;
+    const el = document.querySelector(`#id_${name}, [name=${name}]`);
+    if (el) el.value = value;
+  }
+
+  function _setJsonField(name, value) {
+    if (value === undefined || value === null) return;
+    const el = document.querySelector(`#id_${name}, [name=${name}]`);
+    if (el) el.value = JSON.stringify(value, null, 2);
+  }
+
+
+  // ══════════════════════════════════════════════════════════════════════════
+  // BOOT
+  // ══════════════════════════════════════════════════════════════════════════
+  function init() {
+    setupAddressParser();
+    setupGenerateButton();
+    setupAdvanceButton();
+    buildStagePanelContainer();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init);
+  } else {
+    init();
+  }
 })();

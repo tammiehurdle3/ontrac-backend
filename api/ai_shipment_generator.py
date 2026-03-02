@@ -1,812 +1,863 @@
 """
 api/ai_shipment_generator.py
 
-Three public functions:
-  generate_shipment_data()   — new shipment, 2 initial events (Label Created + Package Received)
-  smart_advance_shipment()   — MAIN: catches up ALL missed stages OR advances one with Gemini
-  advance_shipment_stage()   — single Gemini advance (called internally by smart_advance)
+COMPLETE REBUILD — Deterministic routing + AI descriptions only.
 
-Timestamps use LOCAL TIME of each hub city.
-Out for Delivery and Delivered are anchored to the shipment ExpectedDate.
+What changed vs old version:
+  - Stage PIPELINE is now hardcoded per destination region (real-world routes)
+  - AI (Gemini) ONLY writes the event description text — never decides routing
+  - Label Created is always stage 0
+  - Chicago will NEVER appear for a Spain shipment again
+  - Madrid will NEVER be listed as a hub departure point
+  - Admin can now jump to ANY specific stage directly, not just next
+
+Two public functions:
+  generate_shipment_data(destination_city, destination_country)
+  advance_shipment_stage(shipment, target_stage_key=None)
+
+One helper:
+  get_stage_pipeline_for_admin(shipment)  — used by the stage selector UI
 """
 
-import requests
+import os
 import json
-import secrets
 import random
 from datetime import datetime, timedelta
-from django.conf import settings
+from zoneinfo import ZoneInfo
+
+# ─── Gemini setup ─────────────────────────────────────────────────────────────
+try:
+    import google.generativeai as genai
+    GEMINI_KEY = os.environ.get("GEMINI_API_KEY", "")
+    if GEMINI_KEY:
+        genai.configure(api_key=GEMINI_KEY)
+    GEMINI_AVAILABLE = bool(GEMINI_KEY)
+except ImportError:
+    GEMINI_AVAILABLE = False
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# HUB TIMEZONE OFFSETS
-# ─────────────────────────────────────────────────────────────────────────────
-HUB_TIMEZONES = {
-    "Phoenix, AZ":                        -7,
-    "Chicago, IL":                        -6,
-    "Los Angeles, CA":                    -8,
-    "Miami, FL":                          -5,
-    "New York, NY":                       -5,
-    "Dallas, TX":                         -6,
-    "Leipzig, Germany":                   +1,
-    "London, UK":                          0,
-    "Paris, France":                      +1,
-    "Amsterdam, Netherlands":             +1,
-    "Milan, Italy":                       +1,
-    "Madrid, Spain":                      +1,
-    "Vienna, Austria":                    +1,
-    "Zurich, Switzerland":                +1,
-    "Stockholm, Sweden":                  +1,
-    "Oslo, Norway":                       +1,
-    "Copenhagen, Denmark":                +1,
-    "Warsaw, Poland":                     +1,
-    "Lisbon, Portugal":                    0,
-    "Athens, Greece":                     +2,
-    "Istanbul, Turkey":                   +3,
-    "Tel Aviv, Israel":                   +2,
-    "Dubai, UAE":                         +4,
-    "Riyadh, Saudi Arabia":               +3,
-    "Kuwait City, Kuwait":                +3,
-    "Doha, Qatar":                        +3,
-    "Tokyo, Japan":                       +9,
-    "Seoul, South Korea":                 +9,
-    "Hong Kong":                          +8,
-    "Shanghai, China":                    +8,
-    "Taipei, Taiwan":                     +8,
-    "Singapore":                          +8,
-    "Kuala Lumpur, Malaysia":             +8,
-    "Bangkok, Thailand":                  +7,
-    "Manila, Philippines":                +8,
-    "Jakarta, Indonesia":                 +7,
-    "Ho Chi Minh City, Vietnam":          +7,
-    "Mumbai, India":                      +5,
-    "Delhi, India":                       +5,
-    "Karachi, Pakistan":                  +5,
-    "Dhaka, Bangladesh":                  +6,
-    "Sydney, Australia":                  +11,
-    "Auckland, New Zealand":              +13,
-    "Lagos, Nigeria":                     +1,
-    "Accra, Ghana":                        0,
-    "Johannesburg, South Africa":         +2,
-    "Nairobi, Kenya":                     +3,
-    "Addis Ababa, Ethiopia":              +3,
-    "Cairo, Egypt":                       +2,
-    "Casablanca, Morocco":                +1,
-    "Dar es Salaam, Tanzania":            +3,
-    "Douala, Cameroon":                   +1,
-    "Sao Paulo, Brazil":                  -3,
-    "Buenos Aires, Argentina":            -3,
-    "Santiago, Chile":                    -3,
-    "Lima, Peru":                         -5,
-    "Bogota, Colombia":                   -5,
-    "Caracas, Venezuela":                 -4,
-    "Mexico City, Mexico":                -6,
-    "San Jose, Costa Rica":               -6,
-    "Santo Domingo, Dominican Republic":  -4,
-    "Kingston, Jamaica":                  -5,
-    "Toronto, Canada":                    -5,
-    "Vancouver, Canada":                  -8,
+# ─── REAL-WORLD ROUTING TABLE ─────────────────────────────────────────────────
+# Routes are based on actual major courier networks (DHL/FedEx/UPS)
+# us_gateway  = US departure airport/city (depends on destination region)
+# regional_hub = intermediate sorting hub before destination country
+# hub_short   = short name used in event descriptions
+
+REGION_ROUTES = {
+    # UK & Ireland
+    "UNITED KINGDOM": {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "London Heathrow (LHR), United Kingdom", "hub_short": "London Heathrow"},
+    "UK":             {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "London Heathrow (LHR), United Kingdom", "hub_short": "London Heathrow"},
+    "IRELAND":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Dublin Airport (DUB), Ireland", "hub_short": "Dublin Airport"},
+    # Western Europe (route: LAX → Leipzig LEJ → destination)
+    "SPAIN":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
+    "FRANCE":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Paris Charles de Gaulle (CDG), France", "hub_short": "Paris CDG Hub"},
+    "GERMANY":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    "ITALY":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
+    "NETHERLANDS":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol"},
+    "BELGIUM":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Brussels Airport (BRU), Belgium", "hub_short": "Brussels Hub"},
+    "PORTUGAL":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
+    "SWEDEN":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
+    "NORWAY":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
+    "DENMARK":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
+    "FINLAND":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
+    "SWITZERLAND":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Zurich Airport (ZRH), Switzerland", "hub_short": "Zurich Hub"},
+    "AUSTRIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    "POLAND":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
+    "CZECH REPUBLIC": {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    "HUNGARY":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    "GREECE":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
+    "ROMANIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
+    "CROATIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    # Middle East
+    "UAE":            {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB"},
+    "SAUDI ARABIA":   {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
+    "TURKEY":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic and Europe", "regional_hub": "Istanbul Airport (IST), Turkey", "hub_short": "Istanbul Hub"},
+    "ISRAEL":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Mediterranean", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    "QATAR":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
+    "KUWAIT":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
+    # Asia Pacific
+    "AUSTRALIA":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Sydney Airport (SYD), Australia", "hub_short": "Sydney Hub"},
+    "NEW ZEALAND":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Auckland Airport (AKL), New Zealand", "hub_short": "Auckland Hub"},
+    "JAPAN":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Tokyo Narita (NRT), Japan", "hub_short": "Tokyo Narita"},
+    "SOUTH KOREA":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Incheon International (ICN), South Korea", "hub_short": "Incheon Hub"},
+    "CHINA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Shanghai Pudong (PVG), China", "hub_short": "Shanghai Hub"},
+    "HONG KONG":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub"},
+    "SINGAPORE":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi"},
+    "INDIA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean and South Asia", "regional_hub": "Delhi Indira Gandhi (DEL), India", "hub_short": "Delhi Hub"},
+    "THAILAND":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
+    "MALAYSIA":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
+    "INDONESIA":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
+    "PHILIPPINES":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub"},
+    "VIETNAM":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
+    # Latin America
+    "BRAZIL":         {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean and South America", "regional_hub": "São Paulo Guarulhos (GRU), Brazil", "hub_short": "São Paulo Hub"},
+    "MEXICO":         {"us_gateway": "Dallas/Fort Worth, TX (DFW)", "transit_note": "via the US-Mexico corridor", "regional_hub": "Mexico City International (MEX)", "hub_short": "Mexico City Hub"},
+    "COLOMBIA":       {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub"},
+    "ARGENTINA":      {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Buenos Aires Ezeiza (EZE), Argentina", "hub_short": "Buenos Aires Hub"},
+    "CHILE":          {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Santiago Airport (SCL), Chile", "hub_short": "Santiago Hub"},
+    "PERU":           {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Lima Jorge Chávez (LIM), Peru", "hub_short": "Lima Hub"},
+    "VENEZUELA":      {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub"},
+    "ECUADOR":        {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Lima Jorge Chávez (LIM), Peru", "hub_short": "Lima Hub"},
+    # Canada
+    "CANADA":         {"us_gateway": "Seattle, WA (SEA)", "transit_note": "via the US-Canada border corridor", "regional_hub": "Toronto Pearson (YYZ), Canada", "hub_short": "Toronto Pearson"},
+    # Africa
+    "SOUTH AFRICA":   {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and sub-Saharan Africa", "regional_hub": "Johannesburg O.R. Tambo (JNB), South Africa", "hub_short": "Johannesburg Hub"},
+    "NIGERIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and West Africa", "regional_hub": "Lagos Murtala Muhammed (LOS), Nigeria", "hub_short": "Lagos Hub"},
+    "KENYA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and East Africa", "regional_hub": "Nairobi Jomo Kenyatta (NBO), Kenya", "hub_short": "Nairobi Hub"},
+    "EGYPT":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and North Africa", "regional_hub": "Cairo International (CAI), Egypt", "hub_short": "Cairo Hub"},
+    "GHANA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and West Africa", "regional_hub": "Lagos Murtala Muhammed (LOS), Nigeria", "hub_short": "Lagos Hub"},
+}
+
+DEFAULT_ROUTE = {
+    "us_gateway": "Los Angeles, CA (LAX)",
+    "transit_note": "internationally",
+    "regional_hub": "Frankfurt Airport (FRA), Germany",
+    "hub_short": "Frankfurt Hub",
+}
+
+def _get_route(country):
+    key = country.strip().upper()
+    if key in REGION_ROUTES:
+        return REGION_ROUTES[key]
+    for k, v in REGION_ROUTES.items():
+        if k in key or key in k:
+            return v
+    return DEFAULT_ROUTE
+
+
+# ─── STAGE PIPELINE BUILDER ───────────────────────────────────────────────────
+def build_stage_pipeline(destination_city, destination_country):
+    """
+    Returns the full ordered list of stages for this destination.
+    This is the single source of truth for routing logic.
+    AI never modifies this — it only writes descriptions for each stage.
+    """
+    route = _get_route(destination_country)
+    gw = route["us_gateway"]
+    hub = route["regional_hub"]
+    hub_short = route["hub_short"]
+    transit = route["transit_note"]
+    dest = f"{destination_city}, {destination_country}"
+
+    return [
+        {
+            "key": "label_created",
+            "label": "Label Created",
+            "location": "Phoenix, AZ, USA",
+            "requires_payment": False,
+            "default_desc": "Shipping label created and registered. Package scheduled for pickup from sender.",
+        },
+        {
+            "key": "package_received",
+            "label": "Package Received",
+            "location": "Phoenix, AZ, USA",
+            "requires_payment": False,
+            "default_desc": "Package received and scanned at OnTrac Phoenix facility. Processing initiated.",
+        },
+        {
+            "key": "departed_origin",
+            "label": "Departed Origin Facility",
+            "location": "Phoenix, AZ, USA",
+            "requires_payment": False,
+            "default_desc": f"Package departed Phoenix origin facility. Transferring to US international gateway.",
+        },
+        {
+            "key": "arrived_us_gateway",
+            "label": "Arrived at US International Gateway",
+            "location": gw,
+            "requires_payment": False,
+            "default_desc": f"Package arrived at US international gateway hub ({gw}). Outbound processing underway.",
+        },
+        {
+            "key": "export_clearance",
+            "label": "Export Clearance Completed",
+            "location": gw,
+            "requires_payment": False,
+            "default_desc": "US export customs documentation verified. Package cleared for international departure.",
+        },
+        {
+            "key": "departed_us",
+            "label": "Departed US — In Flight",
+            "location": gw,
+            "requires_payment": False,
+            "default_desc": f"Package loaded and departed {gw} on scheduled international cargo flight.",
+        },
+        {
+            "key": "in_transit_intl",
+            "label": "In Transit — International Flight",
+            "location": gw,  # Show departure gateway, not "In Transit (over the Atlantic)"
+            "requires_payment": False,
+            "default_desc": f"Shipment in transit on international cargo flight from {gw}. En route to {hub_short}.",
+        },
+        {
+            "key": "arrived_hub",
+            "label": "Arrived at Regional Sorting Hub",
+            "location": hub,
+            "requires_payment": False,
+            "default_desc": f"Package arrived at {hub_short}. Sorting and forwarding to destination country in progress.",
+        },
+        {
+            "key": "departed_hub",
+            "label": "Departed Sorting Hub",
+            "location": hub,
+            "requires_payment": False,
+            "default_desc": f"Package departed {hub_short} on connecting flight toward {destination_country}.",
+        },
+        {
+            "key": "arrived_destination_country",
+            "label": "Arrived at Destination Country",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Package arrived at inbound clearance facility in {destination_city}. Import documentation lodged with {destination_country} customs authority.",
+        },
+        {
+            "key": "customs_processing",
+            "label": "Customs Processing",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Shipment is currently under review by {destination_country} customs authority. Import duties and applicable taxes are being assessed. Further updates will follow.",
+        },
+        {
+            "key": "held_customs",
+            "label": "Held at Customs — Payment Required",
+            "location": dest,
+            "requires_payment": True,
+            "default_desc": f"This shipment is held by {destination_country} customs authorities pending payment of import duties and taxes. The package will be released upon receipt of payment.",
+        },
+        {
+            "key": "payment_received",
+            "label": "Payment Received — Customs Released",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Import duty payment confirmed and processed. Package officially released by {destination_country} customs.",
+        },
+        {
+            "key": "departed_customs",
+            "label": "Departed Customs — En Route",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Package cleared customs facility and transferred to local delivery depot in {destination_city}.",
+        },
+        {
+            "key": "arrived_local",
+            "label": "Arrived at Local Delivery Facility",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Package arrived at local OnTrac delivery depot in {destination_city}. Sorted for final delivery.",
+        },
+        {
+            "key": "out_for_delivery",
+            "label": "Out for Delivery",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Package with delivery driver. Estimated delivery today in {destination_city}.",
+        },
+        {
+            "key": "delivered",
+            "label": "Delivered",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Package successfully delivered to recipient in {destination_city}. Delivery confirmed.",
+        },
+    ]
+
+
+# ─── REALISTIC HOUR GAPS BETWEEN STAGES ──────────────────────────────────────
+STAGE_HOUR_GAPS = {
+    "label_created":               (2, 6),
+    "package_received":            (3, 8),
+    "departed_origin":             (4, 10),
+    "arrived_us_gateway":          (4, 9),
+    "export_clearance":            (3, 7),
+    "departed_us":                 (4, 10),
+    "in_transit_intl":             (9, 15),   # long haul flight
+    "arrived_hub":                 (3, 8),
+    "departed_hub":                (6, 14),   # connecting flight
+    "arrived_destination_country": (5, 10),
+    "customs_processing":          (18, 36),  # customs takes 1-2 days
+    "held_customs":                (12, 24),  # customer gets notified
+    "payment_received":            (1, 4),
+    "departed_customs":            (4, 8),
+    "arrived_local":               (6, 12),
+    "out_for_delivery":            (4, 8),
+    "delivered":                   (2, 6),
 }
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# ROUTING TABLE
-# ─────────────────────────────────────────────────────────────────────────────
-ROUTING_TABLE = {
-    "united kingdom": ["Chicago, IL", "London, UK"],
-    "uk":             ["Chicago, IL", "London, UK"],
-    "germany":        ["Chicago, IL", "Leipzig, Germany"],
-    "france":         ["Chicago, IL", "Leipzig, Germany", "Paris, France"],
-    "italy":          ["Chicago, IL", "Leipzig, Germany", "Milan, Italy"],
-    "spain":          ["Chicago, IL", "Leipzig, Germany", "Madrid, Spain"],
-    "netherlands":    ["Chicago, IL", "Leipzig, Germany", "Amsterdam, Netherlands"],
-    "belgium":        ["Chicago, IL", "Leipzig, Germany"],
-    "austria":        ["Chicago, IL", "Leipzig, Germany", "Vienna, Austria"],
-    "switzerland":    ["Chicago, IL", "Leipzig, Germany", "Zurich, Switzerland"],
-    "sweden":         ["Chicago, IL", "Leipzig, Germany", "Stockholm, Sweden"],
-    "norway":         ["Chicago, IL", "Leipzig, Germany", "Oslo, Norway"],
-    "denmark":        ["Chicago, IL", "Leipzig, Germany", "Copenhagen, Denmark"],
-    "poland":         ["Chicago, IL", "Leipzig, Germany", "Warsaw, Poland"],
-    "portugal":       ["Chicago, IL", "Leipzig, Germany", "Lisbon, Portugal"],
-    "greece":         ["Chicago, IL", "Leipzig, Germany", "Athens, Greece"],
-    "turkey":         ["Chicago, IL", "Leipzig, Germany", "Istanbul, Turkey"],
-    "israel":         ["Chicago, IL", "Leipzig, Germany", "Tel Aviv, Israel"],
-    "japan":          ["Los Angeles, CA", "Tokyo, Japan"],
-    "south korea":    ["Los Angeles, CA", "Seoul, South Korea"],
-    "china":          ["Los Angeles, CA", "Hong Kong", "Shanghai, China"],
-    "hong kong":      ["Los Angeles, CA", "Hong Kong"],
-    "taiwan":         ["Los Angeles, CA", "Taipei, Taiwan"],
-    "singapore":      ["Los Angeles, CA", "Hong Kong", "Singapore"],
-    "malaysia":       ["Los Angeles, CA", "Hong Kong", "Kuala Lumpur, Malaysia"],
-    "thailand":       ["Los Angeles, CA", "Hong Kong", "Bangkok, Thailand"],
-    "philippines":    ["Los Angeles, CA", "Hong Kong", "Manila, Philippines"],
-    "indonesia":      ["Los Angeles, CA", "Hong Kong", "Jakarta, Indonesia"],
-    "vietnam":        ["Los Angeles, CA", "Hong Kong", "Ho Chi Minh City, Vietnam"],
-    "india":          ["Los Angeles, CA", "Mumbai, India"],
-    "pakistan":       ["Los Angeles, CA", "Dubai, UAE", "Karachi, Pakistan"],
-    "bangladesh":     ["Los Angeles, CA", "Hong Kong", "Dhaka, Bangladesh"],
-    "australia":      ["Los Angeles, CA", "Sydney, Australia"],
-    "new zealand":    ["Los Angeles, CA", "Sydney, Australia", "Auckland, New Zealand"],
-    "united arab emirates": ["Chicago, IL", "Dubai, UAE"],
-    "uae":            ["Chicago, IL", "Dubai, UAE"],
-    "saudi arabia":   ["Chicago, IL", "Dubai, UAE", "Riyadh, Saudi Arabia"],
-    "kuwait":         ["Chicago, IL", "Dubai, UAE", "Kuwait City, Kuwait"],
-    "qatar":          ["Chicago, IL", "Dubai, UAE", "Doha, Qatar"],
-    "nigeria":        ["New York, NY", "Lagos, Nigeria"],
-    "ghana":          ["New York, NY", "Accra, Ghana"],
-    "south africa":   ["New York, NY", "Amsterdam, Netherlands", "Johannesburg, South Africa"],
-    "kenya":          ["New York, NY", "Amsterdam, Netherlands", "Nairobi, Kenya"],
-    "ethiopia":       ["New York, NY", "Dubai, UAE", "Addis Ababa, Ethiopia"],
-    "egypt":          ["New York, NY", "Leipzig, Germany", "Cairo, Egypt"],
-    "morocco":        ["New York, NY", "Leipzig, Germany", "Casablanca, Morocco"],
-    "tanzania":       ["New York, NY", "Amsterdam, Netherlands", "Dar es Salaam, Tanzania"],
-    "cameroon":       ["New York, NY", "Paris, France", "Douala, Cameroon"],
-    "brazil":         ["Miami, FL", "Sao Paulo, Brazil"],
-    "mexico":         ["Dallas, TX", "Mexico City, Mexico"],
-    "colombia":       ["Miami, FL", "Bogota, Colombia"],
-    "argentina":      ["Miami, FL", "Sao Paulo, Brazil", "Buenos Aires, Argentina"],
-    "chile":          ["Miami, FL", "Sao Paulo, Brazil", "Santiago, Chile"],
-    "peru":           ["Miami, FL", "Lima, Peru"],
-    "venezuela":      ["Miami, FL", "Caracas, Venezuela"],
-    "ecuador":        ["Miami, FL", "Bogota, Colombia"],
-    "costa rica":     ["Miami, FL", "San Jose, Costa Rica"],
-    "dominican republic": ["Miami, FL", "Santo Domingo, Dominican Republic"],
-    "jamaica":        ["Miami, FL", "Kingston, Jamaica"],
-    "canada":         ["Chicago, IL", "Toronto, Canada"],
+# ─── TIMESTAMP HELPERS ────────────────────────────────────────────────────────
+
+# Timezone for each stage key — the local timezone of the facility
+STAGE_TIMEZONE = {
+    "label_created":               "America/Phoenix",
+    "package_received":            "America/Phoenix",
+    "departed_origin":             "America/Phoenix",
+    "arrived_us_gateway":          "America/Los_Angeles",  # LAX/SEA/JFK all in US, close enough
+    "export_clearance":            "America/Los_Angeles",
+    "departed_us":                 "America/Los_Angeles",
+    "in_transit_intl":             "America/Los_Angeles",  # last known = departure airport
+    "arrived_hub":                 "Europe/Berlin",        # Leipzig, Frankfurt, Amsterdam all CET
+    "departed_hub":                "Europe/Berlin",
+    "arrived_destination_country": "Europe/Madrid",        # destination country local time
+    "customs_processing":          "Europe/Madrid",
+    "held_customs":                "Europe/Madrid",
+    "payment_received":            "Europe/Madrid",
+    "departed_customs":            "Europe/Madrid",
+    "arrived_local":               "Europe/Madrid",
+    "out_for_delivery":            "Europe/Madrid",
+    "delivered":                   "Europe/Madrid",
 }
 
-
-# ─────────────────────────────────────────────────────────────────────────────
-# TRANSIT HOURS
-# ─────────────────────────────────────────────────────────────────────────────
-TRANSIT_HOURS = {
-    ("Phoenix, AZ",        "Chicago, IL"):                  5,
-    ("Phoenix, AZ",        "Los Angeles, CA"):              2,
-    ("Phoenix, AZ",        "Miami, FL"):                    6,
-    ("Phoenix, AZ",        "New York, NY"):                 7,
-    ("Phoenix, AZ",        "Dallas, TX"):                   4,
-    ("Chicago, IL",        "London, UK"):                  10,
-    ("Chicago, IL",        "Leipzig, Germany"):            10,
-    ("Chicago, IL",        "Dubai, UAE"):                  14,
-    ("Chicago, IL",        "Toronto, Canada"):              3,
-    ("Los Angeles, CA",    "Tokyo, Japan"):                12,
-    ("Los Angeles, CA",    "Seoul, South Korea"):          12,
-    ("Los Angeles, CA",    "Hong Kong"):                   14,
-    ("Los Angeles, CA",    "Sydney, Australia"):           16,
-    ("Los Angeles, CA",    "Mumbai, India"):               18,
-    ("Los Angeles, CA",    "Dubai, UAE"):                  17,
-    ("Miami, FL",          "Sao Paulo, Brazil"):           10,
-    ("Miami, FL",          "Bogota, Colombia"):             4,
-    ("Miami, FL",          "Lima, Peru"):                   6,
-    ("Miami, FL",          "Caracas, Venezuela"):           4,
-    ("Miami, FL",          "San Jose, Costa Rica"):         3,
-    ("Miami, FL",          "Santo Domingo, Dominican Republic"): 3,
-    ("Miami, FL",          "Kingston, Jamaica"):            2,
-    ("New York, NY",       "Lagos, Nigeria"):              12,
-    ("New York, NY",       "Accra, Ghana"):                12,
-    ("New York, NY",       "Amsterdam, Netherlands"):       8,
-    ("New York, NY",       "Leipzig, Germany"):             9,
-    ("New York, NY",       "Dubai, UAE"):                  13,
-    ("Dallas, TX",         "Mexico City, Mexico"):          3,
-    ("Leipzig, Germany",   "Paris, France"):                3,
-    ("Leipzig, Germany",   "Milan, Italy"):                 3,
-    ("Leipzig, Germany",   "Madrid, Spain"):                3,
-    ("Leipzig, Germany",   "Amsterdam, Netherlands"):       2,
-    ("Leipzig, Germany",   "Vienna, Austria"):              3,
-    ("Leipzig, Germany",   "Zurich, Switzerland"):          3,
-    ("Leipzig, Germany",   "Stockholm, Sweden"):            3,
-    ("Leipzig, Germany",   "Oslo, Norway"):                 3,
-    ("Leipzig, Germany",   "Copenhagen, Denmark"):          3,
-    ("Leipzig, Germany",   "Warsaw, Poland"):               3,
-    ("Leipzig, Germany",   "Lisbon, Portugal"):             4,
-    ("Leipzig, Germany",   "Athens, Greece"):               4,
-    ("Leipzig, Germany",   "Istanbul, Turkey"):             4,
-    ("Leipzig, Germany",   "Tel Aviv, Israel"):             5,
-    ("Leipzig, Germany",   "Cairo, Egypt"):                 5,
-    ("Leipzig, Germany",   "Casablanca, Morocco"):          4,
-    ("Dubai, UAE",         "Riyadh, Saudi Arabia"):         3,
-    ("Dubai, UAE",         "Kuwait City, Kuwait"):          3,
-    ("Dubai, UAE",         "Doha, Qatar"):                  2,
-    ("Dubai, UAE",         "Karachi, Pakistan"):            3,
-    ("Dubai, UAE",         "Addis Ababa, Ethiopia"):        5,
-    ("Hong Kong",          "Shanghai, China"):              3,
-    ("Hong Kong",          "Singapore"):                    4,
-    ("Hong Kong",          "Kuala Lumpur, Malaysia"):       4,
-    ("Hong Kong",          "Bangkok, Thailand"):            4,
-    ("Hong Kong",          "Manila, Philippines"):          3,
-    ("Hong Kong",          "Jakarta, Indonesia"):           5,
-    ("Hong Kong",          "Ho Chi Minh City, Vietnam"):   3,
-    ("Hong Kong",          "Taipei, Taiwan"):               2,
-    ("Hong Kong",          "Dhaka, Bangladesh"):            5,
-    ("Sydney, Australia",  "Auckland, New Zealand"):        4,
-    ("Amsterdam, Netherlands", "Johannesburg, South Africa"): 11,
-    ("Amsterdam, Netherlands", "Nairobi, Kenya"):           9,
-    ("Amsterdam, Netherlands", "Dar es Salaam, Tanzania"):  9,
-    ("Paris, France",      "Douala, Cameroon"):             7,
-    ("Sao Paulo, Brazil",  "Buenos Aires, Argentina"):      4,
-    ("Sao Paulo, Brazil",  "Santiago, Chile"):              4,
+# Realistic LOCAL hour windows (start_hour, end_hour) for each stage
+# Based on how real courier facilities actually operate
+STAGE_HOUR_WINDOW = {
+    "label_created":               (8, 19),   # business hours sender side
+    "package_received":            (7, 21),   # facility intake hours
+    "departed_origin":             (14, 23),  # afternoon/evening truck runs
+    "arrived_us_gateway":          (5, 23),   # 24/7 but mostly daytime intake
+    "export_clearance":            (6, 22),   # customs office hours (extended)
+    "departed_us":                 (19, 23),  # evening cargo flights (red-eyes)
+    "in_transit_intl":             (21, 4),   # overnight — wraps past midnight
+    "arrived_hub":                 (3, 9),    # early morning hub arrivals
+    "departed_hub":                (8, 16),   # morning sort and depart
+    "arrived_destination_country": (6, 14),   # morning arrival at local facility
+    "customs_processing":          (8, 17),   # customs office hours
+    "held_customs":                (8, 17),   # business hours notification
+    "payment_received":            (8, 20),   # any time payment clears
+    "departed_customs":            (9, 18),   # after customs clears
+    "arrived_local":               (8, 15),   # local depot intake
+    "out_for_delivery":            (7, 10),   # drivers depart early
+    "delivered":                   (9, 19),   # delivery window
 }
 
-TRANSIT_DAYS_TOTAL = {
-    "canada": (3,5), "mexico": (4,7),
-    "united kingdom": (5,8), "uk": (5,8), "germany": (5,8),
-    "france": (5,8), "netherlands": (5,8), "italy": (6,9),
-    "spain": (6,9), "sweden": (6,9), "norway": (7,10),
-    "denmark": (6,9), "poland": (7,10), "switzerland": (5,8),
-    "portugal": (6,9), "austria": (6,9), "belgium": (5,8),
-    "greece": (7,10), "turkey": (7,10), "israel": (7,10),
-    "united arab emirates": (6,9), "uae": (6,9),
-    "saudi arabia": (7,10), "kuwait": (7,10), "qatar": (7,10),
-    "japan": (7,10), "south korea": (7,10), "china": (8,12),
-    "hong kong": (7,10), "singapore": (9,13), "india": (9,13),
-    "thailand": (9,13), "malaysia": (9,13), "indonesia": (10,14),
-    "vietnam": (10,14), "philippines": (10,14), "taiwan": (8,12),
-    "pakistan": (10,14), "bangladesh": (11,15),
-    "australia": (10,14), "new zealand": (12,16),
-    "brazil": (8,12), "colombia": (7,11), "argentina": (10,14),
-    "chile": (10,14), "peru": (9,13),
-    "costa rica": (7,11), "dominican republic": (6,10),
-    "jamaica": (6,10), "venezuela": (8,12), "ecuador": (8,12),
-    "nigeria": (12,18), "ghana": (12,18), "south africa": (14,20),
-    "kenya": (14,20), "ethiopia": (14,20), "egypt": (10,14),
-    "morocco": (10,14), "tanzania": (14,20), "cameroon": (14,20),
-}
+def _snap_to_realistic_hours(dt_utc, stage_key):
+    """
+    Given a UTC datetime and a stage key, convert to the stage's local timezone,
+    snap the hour to the realistic operating window, then convert back to UTC.
+    Preserves the date — only adjusts the hour within that day.
+    """
+    tz_name = STAGE_TIMEZONE.get(stage_key, "UTC")
+    window = STAGE_HOUR_WINDOW.get(stage_key, (0, 23))
+    start_h, end_h = window
 
-STATUS_PROGRESSION = {
-    "Label Created":                  "Package Received",
-    "Package Received":               "Departed Origin Facility",
-    "Departed Origin Facility":       "Arrived at Hub",
-    "Arrived at Hub":                 "Departed Hub",
-    "Departed Hub":                   "Arrived in Destination Country",
-    "Arrived in Destination Country": "Out for Delivery",
-    "Out for Delivery":               "Delivered",
-    "Delivered":                      "Delivered",
-}
-
-PROGRESS_PERCENT = {
-    "Label Created": 5, "Package Received": 15,
-    "Departed Origin Facility": 25, "Arrived at Hub": 40,
-    "Departed Hub": 55, "Arrived in Destination Country": 70,
-    "Out for Delivery": 85, "Delivered": 100,
-}
-
-# Local descriptions used during catch-up (no Gemini needed, no rate limits)
-# Hub → real airport/facility name mapping for realistic descriptions
-HUB_FACILITIES = {
-    "Phoenix, AZ":                       "Phoenix Sky Harbor International (PHX)",
-    "Chicago, IL":                       "Chicago O'Hare International (ORD)",
-    "Los Angeles, CA":                   "Los Angeles International (LAX)",
-    "Miami, FL":                         "Miami International Airport (MIA)",
-    "New York, NY":                      "John F. Kennedy International (JFK)",
-    "Dallas, TX":                        "Dallas/Fort Worth International (DFW)",
-    "Leipzig, Germany":                  "Leipzig/Halle DHL Hub (LEJ)",
-    "London, UK":                        "London Heathrow (LHR)",
-    "Paris, France":                     "Paris Charles de Gaulle (CDG)",
-    "Amsterdam, Netherlands":            "Amsterdam Schiphol (AMS)",
-    "Milan, Italy":                      "Milan Malpensa (MXP)",
-    "Madrid, Spain":                     "Madrid Barajas (MAD)",
-    "Vienna, Austria":                   "Vienna International (VIE)",
-    "Zurich, Switzerland":               "Zurich Airport (ZRH)",
-    "Stockholm, Sweden":                 "Stockholm Arlanda (ARN)",
-    "Oslo, Norway":                      "Oslo Gardermoen (OSL)",
-    "Copenhagen, Denmark":               "Copenhagen Airport (CPH)",
-    "Warsaw, Poland":                    "Warsaw Chopin Airport (WAW)",
-    "Lisbon, Portugal":                  "Lisbon Humberto Delgado (LIS)",
-    "Athens, Greece":                    "Athens International (ATH)",
-    "Istanbul, Turkey":                  "Istanbul Airport (IST)",
-    "Tel Aviv, Israel":                  "Ben Gurion International (TLV)",
-    "Dubai, UAE":                        "Dubai International (DXB)",
-    "Riyadh, Saudi Arabia":              "King Khalid International (RUH)",
-    "Kuwait City, Kuwait":               "Kuwait International Airport (KWI)",
-    "Doha, Qatar":                       "Hamad International Airport (DOH)",
-    "Tokyo, Japan":                      "Tokyo Narita International (NRT)",
-    "Seoul, South Korea":                "Incheon International Airport (ICN)",
-    "Hong Kong":                         "Hong Kong International (HKG)",
-    "Shanghai, China":                   "Shanghai Pudong International (PVG)",
-    "Taipei, Taiwan":                    "Taiwan Taoyuan International (TPE)",
-    "Singapore":                         "Singapore Changi Airport (SIN)",
-    "Kuala Lumpur, Malaysia":            "Kuala Lumpur International (KUL)",
-    "Bangkok, Thailand":                 "Suvarnabhumi Airport Bangkok (BKK)",
-    "Manila, Philippines":               "Ninoy Aquino International (MNL)",
-    "Jakarta, Indonesia":                "Soekarno-Hatta International (CGK)",
-    "Ho Chi Minh City, Vietnam":         "Tan Son Nhat International (SGN)",
-    "Mumbai, India":                     "Chhatrapati Shivaji Maharaj (BOM)",
-    "Delhi, India":                      "Indira Gandhi International (DEL)",
-    "Karachi, Pakistan":                 "Jinnah International Airport (KHI)",
-    "Dhaka, Bangladesh":                 "Hazrat Shahjalal International (DAC)",
-    "Sydney, Australia":                 "Sydney Kingsford Smith (SYD)",
-    "Auckland, New Zealand":             "Auckland International Airport (AKL)",
-    "Lagos, Nigeria":                    "Murtala Muhammed International (LOS)",
-    "Accra, Ghana":                      "Kotoka International Airport (ACC)",
-    "Johannesburg, South Africa":        "O.R. Tambo International (JNB)",
-    "Nairobi, Kenya":                    "Jomo Kenyatta International (NBO)",
-    "Addis Ababa, Ethiopia":             "Addis Ababa Bole International (ADD)",
-    "Cairo, Egypt":                      "Cairo International Airport (CAI)",
-    "Casablanca, Morocco":               "Mohammed V International (CMN)",
-    "Dar es Salaam, Tanzania":           "Julius Nyerere International (DAR)",
-    "Douala, Cameroon":                  "Douala International Airport (DLA)",
-    "Sao Paulo, Brazil":                 "São Paulo/Guarulhos International (GRU)",
-    "Buenos Aires, Argentina":           "Ministro Pistarini International (EZE)",
-    "Santiago, Chile":                   "Arturo Merino Benítez International (SCL)",
-    "Lima, Peru":                        "Jorge Chávez International (LIM)",
-    "Bogota, Colombia":                  "El Dorado International (BOG)",
-    "Caracas, Venezuela":                "Simón Bolívar International (CCS)",
-    "Mexico City, Mexico":               "Mexico City International (MEX)",
-    "San Jose, Costa Rica":              "Juan Santamaría International (SJO)",
-    "Santo Domingo, Dominican Republic": "Las Américas International (SDQ)",
-    "Kingston, Jamaica":                 "Norman Manley International (KIN)",
-    "Toronto, Canada":                   "Toronto Pearson International (YYZ)",
-    "Vancouver, Canada":                 "Vancouver International Airport (YVR)",
-}
-
-def _get_catchup_description(status: str, location: str) -> str:
-    """Generate a short realistic scan description for catch-up events."""
-    facility = HUB_FACILITIES.get(location, location)
-    templates = {
-        "Departed Origin Facility": [
-            f"Shipment departed {facility}. En route to connecting hub.",
-            f"Package dispatched from origin. Departed {facility} on scheduled service.",
-        ],
-        "Arrived at Hub": [
-            f"Arrived at {facility}. Package processing for onward connection.",
-            f"Shipment received at {facility}. Staged for next departure.",
-        ],
-        "Departed Hub": [
-            f"Departed {facility}. Loaded on international cargo service.",
-            f"Package dispatched from {facility}. In transit to destination country.",
-        ],
-        "Arrived in Destination Country": [
-            f"Arrived at {facility}. Package presented to customs for clearance.",
-            f"Shipment cleared inbound at {facility}. Customs processing underway.",
-        ],
-        "Out for Delivery": [
-            f"Package collected from {facility}. Out for final delivery.",
-            f"Loaded on delivery vehicle at {facility}. Final delivery in progress.",
-        ],
-        "Delivered": [
-            "Package successfully delivered to recipient. Shipment complete.",
-            "Delivered to consignee. Proof of delivery obtained.",
-        ],
-    }
-    import random as _r
-    options = templates.get(status, [f"{status} at {location}."])
-    return _r.choice(options)
-
-# ─────────────────────────────────────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────────────────────────────────────
-def _local_time_str(utc_dt: datetime, hub_location: str) -> str:
-    offset_hours = HUB_TIMEZONES.get(hub_location, 0)
-    local_dt = utc_dt + timedelta(hours=offset_hours)
-    hour = local_dt.hour
-    minute = local_dt.minute
-    ampm = "AM" if hour < 12 else "PM"
-    hour12 = hour % 12 or 12
-    return f"{local_dt.strftime('%Y-%m-%d')} at {hour12}:{minute:02d} {ampm}"
-
-
-def _parse_timestamp(ts_str: str, location: str) -> datetime:
     try:
-        clean = ts_str.replace(' at ', ' ')
-        local_dt = datetime.strptime(clean, '%Y-%m-%d %I:%M %p')
-        offset_hours = HUB_TIMEZONES.get(location, 0)
-        return local_dt - timedelta(hours=offset_hours)
+        local_tz = ZoneInfo(tz_name)
     except Exception:
-        return datetime.utcnow()
+        return dt_utc  # unknown tz, return as-is
+
+    local_dt = dt_utc.astimezone(local_tz)
+    local_hour = local_dt.hour
+
+    # Handle windows that wrap past midnight (e.g. 21→4)
+    if start_h > end_h:
+        # Overnight window — valid hours are start_h..23 or 0..end_h
+        in_window = local_hour >= start_h or local_hour <= end_h
+    else:
+        in_window = start_h <= local_hour <= end_h
+
+    if not in_window:
+        if start_h > end_h:
+            choices = list(range(start_h, 24)) + list(range(0, end_h + 1))
+        else:
+            choices = list(range(start_h, end_h + 1))
+        new_hour = random.choice(choices)
+        new_minute = random.randint(3, 58)
+        local_dt = local_dt.replace(hour=new_hour, minute=new_minute, second=0, microsecond=0)
+
+    result_utc = local_dt.astimezone(ZoneInfo("UTC"))
+
+    # KEY FIX: snap may pick a valid but future hour (e.g. 4 PM when it's 7 AM Phoenix).
+    # Roll back one day so the timestamp is always in the past.
+    now_utc = datetime.now(tz=ZoneInfo("UTC"))
+    if result_utc > now_utc:
+        local_dt = local_dt - timedelta(days=1)
+        result_utc = local_dt.astimezone(ZoneInfo("UTC"))
+
+    return result_utc
 
 
-def _parse_expected_date(expected_date_str: str):
+def _format_ts(dt, stage_key=None):
+    """
+    Format datetime to display string in the facility's LOCAL timezone.
+    Label Created shows Phoenix time. Leipzig shows German time. Madrid shows Spanish time.
+    Exactly how DHL/FedEx work.
+    """
+    if stage_key and stage_key in STAGE_TIMEZONE:
+        try:
+            local_tz = ZoneInfo(STAGE_TIMEZONE[stage_key])
+            dt = dt.astimezone(local_tz)
+        except Exception:
+            pass
+    return dt.strftime("%Y-%m-%d at %-I:%M %p")
+
+def _parse_ts(ts_str):
+    """Parse our standard timestamp string back to datetime."""
     try:
-        return datetime.strptime(expected_date_str.strip(), '%B %d, %Y')
+        dt = datetime.strptime(ts_str, "%Y-%m-%d at %I:%M %p")
+        return dt.replace(tzinfo=ZoneInfo("UTC"))
     except Exception:
+        return datetime.now(tz=ZoneInfo("UTC")) - timedelta(hours=12)
+
+
+# ─── GEMINI DESCRIPTION WRITER ────────────────────────────────────────────────
+def _ai_description(stage_key, stage_label, location, dest_city, dest_country):
+    """
+    Ask Gemini to write a realistic single-line tracking event description.
+    Returns None on any failure — caller uses default_desc as fallback.
+    """
+    if not GEMINI_AVAILABLE:
+        return None
+    try:
+        model = genai.GenerativeModel("gemini-2.0-flash-lite")
+        prompt = (
+            f"Write a single realistic tracking event description for an international courier parcel.\n"
+            f"Stage: {stage_label}\n"
+            f"Facility location: {location}\n"
+            f"Final destination: {dest_city}, {dest_country}\n\n"
+            f"Rules:\n"
+            f"- Maximum 18 words\n"
+            f"- Use specific airport codes or facility names where appropriate\n"
+            f"- Sound exactly like DHL or FedEx tracking text\n"
+            f"- Do NOT mention payment amounts\n"
+            f"- Do NOT be vague\n"
+            f"- Output ONLY the description, no quotes, no explanation"
+        )
+        response = model.generate_content(prompt)
+        text = response.text.strip().strip('"\'')
+        return text if len(text) > 8 else None
+    except Exception as e:
+        print(f"[AI] Gemini failed for stage {stage_key}: {e}")
         return None
 
 
-def _build_full_route(country: str, destination_city: str) -> list:
-    key = country.lower().strip()
-    hubs = ROUTING_TABLE.get(key, ["Chicago, IL", "Leipzig, Germany"])
-    return ["Phoenix, AZ"] + hubs + [destination_city]
-
-
-def _get_total_days(country: str) -> tuple:
-    key = country.lower().strip()
-    return TRANSIT_DAYS_TOTAL.get(key, (10, 15))
-
-
-def _next_location(route: list, current_location: str) -> str:
-    try:
-        idx = route.index(current_location)
-        return route[idx + 1] if idx + 1 < len(route) else route[-1]
-    except ValueError:
-        return route[1] if len(route) > 1 else route[0]
-
-
-def _calc_next_utc(next_status, next_location, current_location, current_utc, expected_dt):
-    """Calculate the UTC time the next stage should happen."""
-    if next_status == 'Out for Delivery' and expected_dt:
-        local_9am = (expected_dt - timedelta(days=1)).replace(
-            hour=9, minute=0, second=0, microsecond=0
-        )
-        offset = HUB_TIMEZONES.get(next_location, 0)
-        return local_9am - timedelta(hours=offset)
-
-    if next_status == 'Delivered' and expected_dt:
-        local_2pm = expected_dt.replace(hour=14, minute=0, second=0, microsecond=0)
-        offset = HUB_TIMEZONES.get(next_location, 0)
-        return local_2pm - timedelta(hours=offset)
-
-    transit_h = TRANSIT_HOURS.get((current_location, next_location), 8)
-    return current_utc + timedelta(hours=transit_h)
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# LOCAL FALLBACK: Generate new shipment with zero API calls
-# ─────────────────────────────────────────────────────────────────────────────
-def _generate_local(destination_city: str, destination_country: str) -> dict:
-    """Generates a complete new shipment using only local templates. Zero API calls."""
-    import random as _r
-    now_utc       = datetime.utcnow()
-    tracking_id   = 'OT' + ''.join([str(secrets.randbelow(10)) for _ in range(10)])
-    route         = _build_full_route(destination_country, destination_city)
-    _, max_days   = _get_total_days(destination_country)
-    expected_date = (now_utc + timedelta(days=max_days)).strftime('%B %d, %Y')
-    weight_val    = round(_r.uniform(4.2, 4.6), 1)
-    label_time_str   = _local_time_str(now_utc - timedelta(hours=2), "Phoenix, AZ")
-    phoenix_time_str = _local_time_str(now_utc, "Phoenix, AZ")
-    data = {
-        "trackingId":      tracking_id,
-        "status":          "Package Received",
-        "expectedDate":    expected_date,
-        "progressPercent": 15,
-        "progressLabels":  [
-            "Label Created", "Package Received", "Departed Origin Facility",
-            "Arrived at Hub", "Departed Hub", "Arrived in Destination Country",
-            "Out for Delivery", "Delivered"
-        ],
-        "recentEvent": {
-            "status":      "Package Received",
-            "location":    "Phoenix, AZ",
-            "timestamp":   phoenix_time_str,
-            "description": "Package received and accepted at Phoenix Sky Harbor (PHX). Shipment prepared for dispatch.",
-        },
-        "allEvents": [
-            {"date": label_time_str,   "event": "Label Created",    "city": "Phoenix, AZ"},
-            {"date": phoenix_time_str, "event": "Package Received", "city": "Phoenix, AZ"},
-        ],
-        "shipmentDetails": {
-            "service":        "International Express",
-            "weight":         f"{weight_val} lbs",
-            "dimensions":     '12" x 10" x 4"',
-            "originZip":      "85043",
-            "destinationZip": "",
-        },
-    }
-    return {"success": True, "data": data}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC FUNCTION 1: Generate new shipment (Label Created + Package Received)
-# ─────────────────────────────────────────────────────────────────────────────
-def generate_shipment_data(destination_city: str, destination_country: str) -> dict:
-    from .models import SiteSettings
-    ai_mode = SiteSettings.get_ai_provider()
-
-    if ai_mode == 'local_only':
-        # Build shipment data entirely from local logic, no Gemini
-        return _generate_local(destination_city, destination_country)
-
-    api_key = getattr(settings, 'GEMINI_API_KEY', '')
-    if not api_key:
-        raise ValueError("GEMINI_API_KEY not set in environment variables.")
-
-    now_utc      = datetime.utcnow()
-    tracking_id  = 'OT' + ''.join([str(secrets.randbelow(10)) for _ in range(10)])
-    route        = _build_full_route(destination_country, destination_city)
-    _, max_days  = _get_total_days(destination_country)
-    expected_date = (now_utc + timedelta(days=max_days)).strftime('%B %d, %Y')
-
-    label_time_str   = _local_time_str(now_utc - timedelta(hours=2), "Phoenix, AZ")
-    phoenix_time_str  = _local_time_str(now_utc, "Phoenix, AZ")
-    route_display     = " → ".join(route)
-    import random as _r
-    weight_val = round(_r.uniform(4.2, 4.6), 1)
-    prompt = f"""You are a logistics data generator for OnTrac Courier.
-
-Generate initial shipment data for a Milani Cosmetics package just received at Phoenix facility.
-Tracking ID: {tracking_id}
-Destination: {destination_city}, {destination_country}
-Label created time (Phoenix local): {label_time_str}
-Package received time (Phoenix local): {phoenix_time_str}
-Expected delivery: {expected_date}
-Full route this shipment will take: {route_display}
-
-RULES:
-- Two events in allEvents: Label Created first, then Package Received
-- recentEvent is the Package Received event
-- Descriptions sound like real carrier system scan messages
-
-Return ONLY valid JSON, no markdown fences:
-{{
-  "trackingId": "{tracking_id}",
-  "status": "Package Received",
-  "expectedDate": "{expected_date}",
-  "progressPercent": 15,
-  "progressLabels": ["Label Created","Package Received","Departed Origin Facility","Arrived at Hub","Departed Hub","Arrived in Destination Country","Out for Delivery","Delivered"],
-  "recentEvent": {{
-    "status": "Package Received",
-    "location": "Phoenix, AZ",
-    "timestamp": "{phoenix_time_str}",
-    "description": "Package received and accepted at Phoenix origin facility. Shipment in preparation for dispatch."
-  }},
-  "allEvents": [
-    {{
-      "date": "{label_time_str}",
-      "event": "Label Created",
-      "city": "Phoenix, AZ"
-    }},
-    {{
-      "date": "{phoenix_time_str}",
-      "event": "Package Received",
-      "city": "Phoenix, AZ"
-    }}
-  ],
-  "shipmentDetails": {{
-    "service": "International Express",
-    "weight": "{weight_val} lbs",
-    "dimensions": "12\\" x 10\\" x 4\\"",
-    "originZip": "85043",
-    "destinationZip": ""
-  }}
-}}"""
-
-    result = _call_gemini(api_key, prompt, force_tracking_id=tracking_id)
-    if not result['success']:
-        print(f"[AI] All Gemini models failed for generate, using local fallback. Reason: {result.get('error')}")
-        return _generate_local(destination_city, destination_country)
-    return result
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC FUNCTION 2: Smart advance (catch-up + single Gemini)
-# ─────────────────────────────────────────────────────────────────────────────
-def smart_advance_shipment(current_data: dict) -> dict:
+def _generate_shipment_details(destination_country):
     """
-    Called by the Advance to Next Stage button.
-
-    Checks how many stages should have happened since the last logged event:
-    - 2 or more missed → fills ALL of them instantly using local descriptions
-    - 0 or 1 missed   → advances one step using Gemini for a realistic description
-
-    Out for Delivery = day before ExpectedDate at 9AM local destination time
-    Delivered        = ExpectedDate at 2PM local destination time
+    Generates realistic shipment detail fields.
+    Dimensions are fixed at 12x10x4. Weight varies 4.2-4.6 lbs.
+    Service is International Priority for international, Ground for domestic.
     """
-    now_utc = datetime.utcnow()
-
-    if current_data.get('status') == 'Delivered':
-        return {"success": False, "error": "Shipment is already delivered."}
-
-    missed = _get_missed_stages(current_data, now_utc)
-
-    if len(missed) >= 2:
-        result = _apply_caught_up_stages(current_data, missed)
-        result['message'] = f"Caught up {len(missed)} missed stage(s) automatically."
-        return result
-    else:
-        return advance_shipment_stage(current_data)
-
-
-def _get_missed_stages(current_data: dict, now_utc: datetime) -> list:
-    """Returns list of (status, location, event_utc, timestamp_str) for all missed stages."""
-    current_status = current_data.get('status', 'Package Received')
-    if current_status == 'Delivered':
-        return []
-
-    recent_event     = current_data.get('recentEvent', {})
-    current_location = recent_event.get('location', 'Phoenix, AZ')
-    last_utc         = _parse_timestamp(recent_event.get('timestamp', ''), current_location)
-
-    destination  = current_data.get('destination', '')
-    parts        = destination.rsplit(',', 1)
-    dest_city    = parts[0].strip() if len(parts) == 2 else destination
-    dest_country = parts[1].strip() if len(parts) == 2 else ''
-    route        = _build_full_route(dest_country, dest_city)
-    expected_dt  = _parse_expected_date(current_data.get('expectedDate', ''))
-
-    missed      = []
-    status      = current_status
-    location    = current_location
-    current_utc = last_utc
-
-    while status != 'Delivered':
-        next_status   = STATUS_PROGRESSION.get(status, 'Delivered')
-        next_location = _next_location(route, location)
-        next_utc      = _calc_next_utc(next_status, next_location, location, current_utc, expected_dt)
-
-        if next_utc <= now_utc:
-            ts_str = _local_time_str(next_utc, next_location)
-            missed.append((next_status, next_location, next_utc, ts_str))
-            status      = next_status
-            location    = next_location
-            current_utc = next_utc
-        else:
-            break
-
-    return missed
-
-
-def _apply_caught_up_stages(current_data: dict, stages: list) -> dict:
-    updated    = dict(current_data)
-    all_events = list(current_data.get('allEvents', []))
-
-    for next_status, next_location, _, ts_str in stages:
-        description = _get_catchup_description(next_status, next_location)
-
-        new_recent = {
-            'status':      next_status,
-            'location':    next_location,
-            'timestamp':   ts_str,
-            'description': description,
-        }
-        all_events.append({'date': ts_str, 'event': next_status, 'city': next_location})
-        updated['status']          = next_status
-        updated['recentEvent']     = new_recent
-        updated['progressPercent'] = PROGRESS_PERCENT.get(next_status, 50)
-
-    updated['allEvents'] = all_events
-    return {'success': True, 'data': updated, 'stages_filled': len(stages)}
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# PUBLIC FUNCTION 3: Single Gemini advance (called internally)
-# ─────────────────────────────────────────────────────────────────────────────
-def advance_shipment_stage(current_data: dict) -> dict:
-    from .models import SiteSettings
-    ai_mode = SiteSettings.get_ai_provider()
-
-    api_key = getattr(settings, 'GEMINI_API_KEY', '') if ai_mode != 'local_only' else ''
-
-    tracking_id    = current_data.get('trackingId', '')
-    current_status = current_data.get('status', 'Package Received')
-    destination    = current_data.get('destination', '')
-    recent_event   = current_data.get('recentEvent', {})
-    all_events     = current_data.get('allEvents', [])
-
-    if current_status == 'Delivered':
-        return {"success": False, "error": "Shipment is already delivered."}
-
-    parts        = destination.rsplit(',', 1)
-    dest_city    = parts[0].strip() if len(parts) == 2 else destination
-    dest_country = parts[1].strip() if len(parts) == 2 else ''
-    route        = _build_full_route(dest_country, dest_city)
-
-    next_status      = STATUS_PROGRESSION.get(current_status, "In Transit")
-    current_location = recent_event.get('location', 'Phoenix, AZ')
-    next_location    = _next_location(route, current_location)
-    last_utc         = _parse_timestamp(recent_event.get('timestamp', ''), current_location)
-    expected_dt      = _parse_expected_date(current_data.get('expectedDate', ''))
-
-    next_event_utc     = _calc_next_utc(next_status, next_location, current_location, last_utc, expected_dt)
-    next_timestamp_str = _local_time_str(next_event_utc, next_location)
-    next_progress      = PROGRESS_PERCENT.get(next_status, 50)
-
-    facility_name = HUB_FACILITIES.get(next_location, next_location)
-    prompt = f"""You are a logistics data generator for OnTrac Courier.
-
-Generate the next scan event for this in-transit shipment.
-Tracking ID: {tracking_id}
-Next status: {next_status}
-Facility: {facility_name}
-Local time: {next_timestamp_str}
-
-Write ONE short realistic carrier scan message. Include the facility name naturally.
-Max 15 words. Sound like real DHL or FedEx. No preamble.
-
-Return ONLY valid JSON, no markdown fences:
-{{
-  "status": "{next_status}",
-  "location": "{next_location}",
-  "timestamp": "{next_timestamp_str}",
-  "description": "YOUR REALISTIC SCAN MESSAGE HERE"
-}}"""
-
-    result = _call_gemini(api_key, prompt)
-    if not result['success']:
-        # All Gemini models exhausted — fall back to local templates silently
-        print(f"[AI] All models failed, using local fallback. Reason: {result.get('error')}")
-        fallback_description = _get_catchup_description(next_status, next_location)
-        new_event = {
-            'status':      next_status,
-            'location':    next_location,
-            'timestamp':   next_timestamp_str,
-            'description': fallback_description,
-        }
-    else:
-        new_event = result['data']
-    new_event_entry = {
-        "date":  new_event.get('timestamp', next_timestamp_str),
-        "event": next_status,
-        "city":  next_location,
+    weight = round(random.uniform(4.2, 4.6), 1)
+    country_upper = destination_country.strip().upper()
+    is_domestic = country_upper in ("USA", "US", "UNITED STATES")
+    service = "Ground" if is_domestic else "International Priority"
+    return {
+        "service": service,
+        "weight": f"{weight} lbs",
+        "dimensions": '12" x 10" x 4"',
+        "originZip": "85043",
+        "destinationZip": "",  # filled by address parser in admin JS
     }
-    updated = dict(current_data)
-    updated['status']          = next_status
-    updated['recentEvent']     = new_event
-    updated['allEvents']       = list(all_events) + [new_event_entry]
-    updated['progressPercent'] = next_progress
-    return {"success": True, "data": updated}
 
 
-# ─────────────────────────────────────────────────────────────────────────────
-# SHARED GEMINI CALLER
-# ─────────────────────────────────────────────────────────────────────────────
-# Model cascade — tried in order, falls back on 429
-GEMINI_MODELS = [
-    "gemini-2.5-flash",
-    "gemini-2.0-flash-lite",
+# ─── PUBLIC: Generate New Shipment ───────────────────────────────────────────
+def generate_shipment_data(destination_city, destination_country, expected_date_str=None, journey_days=None):
+    """
+    Create a brand-new shipment starting at 'Label Created'.
+
+    Args:
+        destination_city, destination_country : where it's going
+        expected_date_str : optional "March 10, 2026" — sets journey end
+        journey_days      : optional integer — if set, expected = today + journey_days
+
+    Returns a dict of fields to apply to the Shipment model.
+    """
+    pipeline = build_stage_pipeline(destination_city, destination_country)
+    route = _get_route(destination_country)
+
+    now = datetime.now(tz=ZoneInfo("America/Phoenix"))
+
+    # ── Determine expected delivery date ─────────────────────────────────────
+    if journey_days is not None:
+        expected_dt = now + timedelta(days=journey_days)
+    elif expected_date_str:
+        expected_dt = None
+        for fmt in ("%B %d, %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+            try:
+                expected_dt = datetime.strptime(expected_date_str, fmt).replace(
+                    tzinfo=ZoneInfo("America/Phoenix"), hour=14, minute=0
+                )
+                break
+            except ValueError:
+                continue
+        if not expected_dt:
+            expected_dt = now + timedelta(days=10)
+    else:
+        # Default: realistic international delivery window
+        expected_dt = now + timedelta(days=random.randint(8, 14))
+
+    # ── Label created: beginning of the journey ───────────────────────────────
+    # How long ago was the label created?
+    # Journey = expected_dt - now = days remaining
+    # Label was created proportionally earlier (stage 0 = 0% of journey)
+    # Total journey from label_created to delivered. If expected is 10 days from now,
+    # and we're at stage 0 right now, label was created ~now (or a couple hours ago).
+    start_dt = now - timedelta(hours=random.uniform(1, 4))
+    start_dt = _snap_to_realistic_hours(start_dt, "label_created")
+
+    first_stage = pipeline[0]
+    ai_desc = _ai_description(
+        first_stage["key"], first_stage["label"],
+        first_stage["location"], destination_city, destination_country
+    )
+    desc = ai_desc or first_stage["default_desc"]
+
+    event_history = [{
+        "city": first_stage["location"],
+        "date": _format_ts(start_dt, "label_created"),
+        "timestamp": _format_ts(start_dt, "label_created"),
+        "event": first_stage["label"],
+        "description": desc,
+    }]
+
+    recent_event = {
+        "event": first_stage["label"],
+        "location": first_stage["location"],
+        "description": desc,
+        "timestamp": _format_ts(start_dt, "label_created"),
+    }
+
+    return {
+        "status": STAGE_TO_VISUAL_LABEL.get(first_stage["key"], first_stage["label"]),
+        "destination": f"{destination_city}, {destination_country}",
+        "destination_city": destination_city,
+        "destination_country": destination_country,
+        "current_stage_key": first_stage["key"],
+        "current_stage_index": 0,
+        "requiresPayment": False,
+        "progressPercent": 0,
+        "progressLabels": VISUAL_PROGRESS_LABELS,
+        "expectedDate": expected_dt.strftime("%B %d, %Y"),
+        "recentEvent": recent_event,
+        "allEvents": event_history,
+        "shipmentDetails": _generate_shipment_details(destination_country),
+        "_route_us_gateway": route["us_gateway"],
+        "_route_regional_hub": route["regional_hub"],
+    }
+
+
+# ─── STATUS STRING → STAGE KEY FALLBACK ──────────────────────────────────────
+# If current_stage_key is empty (pre-migration), map status label to key.
+STATUS_TO_KEY = {
+    "Label Created": "label_created",
+    "Package Received": "package_received",
+    "Departed Origin Facility": "departed_origin",
+    "Arrived at US International Gateway": "arrived_us_gateway",
+    "Export Clearance Completed": "export_clearance",
+    "Departed US — In Flight": "departed_us",
+    "In Transit — International Flight": "in_transit_intl",
+    "Arrived at Regional Sorting Hub": "arrived_hub",
+    "Departed Sorting Hub": "departed_hub",
+    "Arrived at Destination Country": "arrived_destination_country",
+    "Customs Processing": "customs_processing",
+    "Held at Customs — Payment Required": "held_customs",
+    "Payment Received — Customs Released": "payment_received",
+    "Departed Customs — En Route": "departed_customs",
+    "Arrived at Local Delivery Facility": "arrived_local",
+    "Out for Delivery": "out_for_delivery",
+    "Delivered": "delivered",
+    # Legacy status strings from old system
+    "Departed Hub": "departed_hub",
+    "Arrived at Hub": "arrived_hub",
+    "Arrived in Destination Country": "arrived_destination_country",
+    "Payment Confirmed": "payment_received",
+}
+
+
+# ─── VISUAL PROGRESS LABELS (the 8 dots shown on the frontend bar) ───────────
+# These are what the customer sees. Matches the existing progressLabels default.
+VISUAL_PROGRESS_LABELS = [
+    "Label Created",
+    "Package Received",
+    "Departed Origin Facility",
+    "Arrived at Hub",
+    "Departed Hub",
+    "Arrived in Destination Country",
+    "Out for Delivery",
+    "Delivered",
 ]
 
-def _call_gemini(api_key: str, prompt: str, force_tracking_id: str = None) -> dict:
+# Maps every internal stage key → which of the 8 visual labels to show as status.
+# This is what fixes the progress bar. Customer sees "Arrived at Hub" while the
+# detailed event history still shows "Departed US — In Flight", "Export Clearance", etc.
+STAGE_TO_VISUAL_LABEL = {
+    "label_created":               "Label Created",
+    "package_received":            "Package Received",
+    "departed_origin":             "Departed Origin Facility",
+    "arrived_us_gateway":          "Arrived at Hub",
+    "export_clearance":            "Arrived at Hub",
+    "departed_us":                 "Arrived at Hub",
+    "in_transit_intl":             "Arrived at Hub",
+    "arrived_hub":                 "Arrived at Hub",
+    "departed_hub":                "Departed Hub",
+    "arrived_destination_country": "Arrived in Destination Country",
+    "customs_processing":          "Arrived in Destination Country",
+    "held_customs":                "Arrived in Destination Country",
+    "payment_received":            "Arrived in Destination Country",
+    "departed_customs":            "Arrived in Destination Country",
+    "arrived_local":               "Out for Delivery",
+    "out_for_delivery":            "Out for Delivery",
+    "delivered":                   "Delivered",
+}
+def advance_shipment_stage(shipment, target_stage_key=None):
     """
-    Tries Gemini models in cascade order.
-    2.5 Flash (20/day) → 2.0 Flash Lite (1500/day) → caller handles local fallback.
-    """
-    last_error = "All Gemini models exhausted."
+    Advance to the next stage OR jump to any specific stage.
 
-    for model in GEMINI_MODELS:
-        url = (
-            "https://generativelanguage.googleapis.com/v1beta/"
-            f"models/{model}:generateContent?key={api_key}"
-        )
-        payload = {
-            "contents": [{"parts": [{"text": prompt}]}],
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 2000},
-        }
+    Args:
+        shipment         : Shipment model instance
+        target_stage_key : If given, jump directly to that stage.
+                           If None, go to the next stage in sequence.
+
+    Returns:
+        dict of fields to save onto the shipment
+
+    Raises:
+        ValueError if already at last stage or invalid key given
+    """
+    # ── Resolve destination ──────────────────────────────────────────────────
+    dest_city = (getattr(shipment, "destination_city", "") or "").strip()
+    dest_country = (getattr(shipment, "destination_country", "") or "").strip()
+
+    if not dest_city or not dest_country:
+        parts = (getattr(shipment, "destination", "") or "").split(",")
+        dest_city = parts[0].strip() if parts else "Unknown City"
+        dest_country = parts[-1].strip() if len(parts) > 1 else "Unknown Country"
+
+    pipeline = build_stage_pipeline(dest_city, dest_country)
+    pipeline_keys = [s["key"] for s in pipeline]
+
+    # ── Find current position ────────────────────────────────────────────────
+    current_key = (getattr(shipment, "current_stage_key", None) or "").strip()
+
+    # Fallback 1: if key not set, try STATUS_TO_KEY from status field
+    if not current_key or current_key not in pipeline_keys:
+        status_str = (getattr(shipment, "status", None) or "").strip()
+        current_key = STATUS_TO_KEY.get(status_str, "")
+
+    # Fallback 2: scan allEvents to find the furthest stage that appears in history
+    # This handles manually-entered old shipments correctly
+    if not current_key or current_key not in pipeline_keys:
+        raw_history_check = getattr(shipment, "allEvents", None) or []
+        if isinstance(raw_history_check, str):
+            try:
+                raw_history_check = json.loads(raw_history_check)
+            except Exception:
+                raw_history_check = []
+        event_labels_in_history = {e.get("event", "").strip() for e in raw_history_check}
+        # Find the highest pipeline index that appears in the event history
+        best_index = -1
+        for pi, pstage in enumerate(pipeline):
+            if pstage["label"] in event_labels_in_history:
+                best_index = pi
+            # Also check STATUS_TO_KEY reverse match
+            for ev_label in event_labels_in_history:
+                mapped = STATUS_TO_KEY.get(ev_label, "")
+                if mapped == pstage["key"] and pi > best_index:
+                    best_index = pi
+        if best_index >= 0:
+            current_key = pipeline[best_index]["key"]
+        else:
+            current_key = "label_created"
+
+    try:
+        current_index = pipeline_keys.index(current_key)
+    except ValueError:
+        current_index = 0
+
+    # ── Determine target ─────────────────────────────────────────────────────
+    if target_stage_key:
+        if target_stage_key not in pipeline_keys:
+            raise ValueError(f"Unknown stage key: '{target_stage_key}'")
+        target_index = pipeline_keys.index(target_stage_key)
+    else:
+        target_index = current_index + 1
+        if target_index >= len(pipeline):
+            raise ValueError("Shipment is already at the final stage (Delivered).")
+
+    if target_index <= current_index:
+        raise ValueError(f"Cannot go backwards. Current: {current_key}")
+
+    # ── Load existing event history ──────────────────────────────────────────
+    raw_history = getattr(shipment, "allEvents", None) or []
+    if isinstance(raw_history, str):
         try:
-            resp = requests.post(url, json=payload, timeout=20)
+            raw_history = json.loads(raw_history)
+        except Exception:
+            raw_history = []
 
-            # 429 = rate limited on this model, try next
-            if resp.status_code == 429:
-                print(f"[AI] {model} rate limited, trying next model...")
-                last_error = f"Rate limited on {model}"
+    # ── TIMELINE-CONTROLLED TIMESTAMP DISTRIBUTION ───────────────────────────
+    #
+    # Key rule: stages being marked as COMPLETED NOW must all land in the past.
+    # We use two windows:
+    #   - "completed window": journey_start → now  (for all stages being added now)
+    #   - journey_end (expectedDate) is only used for the final "Delivered" stage
+    #
+    # This prevents the collapse bug where all timestamps clamp to the same minute.
+    # Example: expected is March 11, today is March 1, you jump to Held at Customs.
+    # All stages distribute proportionally between March 1 (start) and ~now,
+    # so they spread realistically across the actual elapsed time.
+
+    now_utc = datetime.now(tz=ZoneInfo("UTC"))
+    stages_to_add = pipeline[current_index + 1 : target_index + 1]
+
+    # ── Find journey start (first event date) ─────────────────────────────────
+    if raw_history:
+        journey_start = _parse_ts(raw_history[0].get("date", ""))
+    else:
+        journey_start = now_utc - timedelta(days=5)
+
+    # ── Completed stages window end = a realistic "few hours ago" ─────────────
+    # Never in the future — the whole point is these stages have already happened.
+    # End 1-3 hours ago so the most recent stage looks recent not stale.
+    completed_window_end = now_utc - timedelta(hours=random.uniform(1.0, 3.0))
+
+    if journey_start >= completed_window_end:
+        journey_start = completed_window_end - timedelta(hours=12)
+
+    completed_window_seconds = (completed_window_end - journey_start).total_seconds()
+    if completed_window_seconds <= 0:
+        completed_window_seconds = 3600 * 8
+
+    # ── Find journey end for the full pipeline fraction calculation ────────────
+    expected_date_str = (getattr(shipment, "expectedDate", None) or "").strip()
+    journey_end = None
+    if expected_date_str:
+        for fmt in ("%B %d, %Y", "%Y-%m-%d", "%d/%m/%Y", "%m/%d/%Y"):
+            try:
+                journey_end = datetime.strptime(expected_date_str, fmt).replace(
+                    tzinfo=ZoneInfo("UTC"), hour=14, minute=0
+                )
+                break
+            except ValueError:
                 continue
+    if not journey_end:
+        journey_end = now_utc + timedelta(days=2)
 
-            resp.raise_for_status()
-            text = resp.json()['candidates'][0]['content']['parts'][0]['text'].strip()
+    total_journey_seconds = (journey_end - journey_start).total_seconds()
+    if total_journey_seconds <= 0:
+        total_journey_seconds = 86400 * 10
 
-            if text.startswith('```'):
-                text = text.split('```')[1]
-                if text.startswith('json'):
-                    text = text[4:]
-            text = text.strip()
+    total_stages = len(pipeline) - 1
 
-            data = json.loads(text)
+    def stage_fraction(stage_index):
+        """What fraction (0.0–1.0) of the journey is this stage at?"""
+        return stage_index / total_stages
 
-            if force_tracking_id:
-                data['trackingId']     = force_tracking_id
-                data['progressLabels'] = [
-                    "Label Created", "Package Received", "Departed Origin Facility",
-                    "Arrived at Hub", "Departed Hub", "Arrived in Destination Country",
-                    "Out for Delivery", "Delivered"
-                ]
-                if 'shipmentDetails' not in data:
-                    data['shipmentDetails'] = {}
-                data['shipmentDetails']['service']   = "International Express"
-                data['shipmentDetails']['originZip'] = "85043"
-                if not data['shipmentDetails'].get('weight') or data['shipmentDetails']['weight'] == '0 lbs':
-                    import random as _r
-                    data['shipmentDetails']['weight'] = f"{round(_r.uniform(4.2, 4.6), 1)} lbs"
-                data['shipmentDetails']['dimensions'] = '12" x 10" x 4"'
+    # ── Build timestamps ───────────────────────────────────────────────────────
+    new_events = []
+    for i, stage in enumerate(stages_to_add):
+        actual_index = current_index + 1 + i
+        frac = stage_fraction(actual_index)
 
-            print(f"[AI] Success with {model}")
-            return {"success": True, "data": data, "model_used": model}
+        # Map the stage's journey fraction onto the COMPLETED window (not future)
+        # So 50% of journey → 50% of (journey_start → now-2h), not 50% of full 10-day span
+        ts = journey_start + timedelta(seconds=frac * completed_window_seconds)
 
-        except requests.RequestException as e:
-            last_error = f"Gemini API error ({model}): {str(e)}"
-            continue
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            last_error = f"Failed to parse Gemini response ({model}): {str(e)}"
-            continue
-        except Exception as e:
-            last_error = str(e)
-            continue
+        # Small variation so timestamps don't look mechanical
+        ts += timedelta(minutes=random.uniform(-8, 8))
 
-    return {"success": False, "error": last_error}
+        # Snap to realistic operating hours for this stage's local timezone
+        ts = _snap_to_realistic_hours(ts, stage["key"])
+
+        # Hard safety: never future, never before journey start
+        ts = min(ts, now_utc - timedelta(minutes=5))
+        if ts < journey_start:
+            ts = journey_start + timedelta(minutes=random.randint(10, 30))
+
+        # Never go backwards from previous event
+        if new_events:
+            prev_dt = _parse_ts(new_events[-1]["date"])
+            if ts <= prev_dt:
+                ts = prev_dt + timedelta(minutes=random.randint(20, 60))
+        elif raw_history:
+            last_dt = _parse_ts(raw_history[-1].get("date", ""))
+            if ts <= last_dt:
+                ts = last_dt + timedelta(minutes=random.randint(20, 60))
+
+        ai_desc = _ai_description(
+            stage["key"], stage["label"],
+            stage["location"], dest_city, dest_country
+        )
+        desc = ai_desc or stage["default_desc"]
+
+        new_events.append({
+            "city": stage["location"],
+            "date": _format_ts(ts, stage["key"]),
+            "event": stage["label"],
+            "description": desc,
+        })
+
+    if not new_events:
+        raise ValueError("No new stages to add.")
+
+    # ── Build return data ────────────────────────────────────────────────────
+    updated_history = raw_history + new_events
+    latest = new_events[-1]
+    target_stage = pipeline[target_index]
+    stages_added = len(new_events)
+    progress = round((target_index / (len(pipeline) - 1)) * 100)
+
+    # Visual status = simplified label shown in header + matched by progress bar dots
+    # Detailed label stays in allEvents event history
+    visual_status = STAGE_TO_VISUAL_LABEL.get(target_stage["key"], target_stage["label"])
+
+    return {
+        "status": visual_status,
+        "current_stage_key": target_stage["key"],
+        "current_stage_index": target_index,
+        "requiresPayment": target_stage["requires_payment"],
+        "progressPercent": progress,
+        "progressLabels": VISUAL_PROGRESS_LABELS,
+        "recentEvent": {
+            "event": latest["event"],
+            "location": latest["city"],
+            "description": latest["description"],
+            "timestamp": latest["date"],
+        },
+        "allEvents": updated_history,
+        # Admin feedback fields (not saved to model)
+        "_stages_added": stages_added,
+        "_jumped_to_label": target_stage["label"],
+        "_jumped_to_key": target_stage["key"],
+    }
+
+
+# ─── PUBLIC: Pipeline for Admin Display ──────────────────────────────────────
+def get_stage_pipeline_for_admin(shipment):
+    """
+    Returns the full pipeline list with each stage annotated:
+      - is_current  : this is the active stage
+      - is_completed: stage is in the past
+      - is_future   : stage hasn't happened yet
+
+    Used by the admin JS to render the visual stage selector.
+    """
+    dest_city = (getattr(shipment, "destination_city", "") or "").strip()
+    dest_country = (getattr(shipment, "destination_country", "") or "").strip()
+    if not dest_city or not dest_country:
+        parts = (getattr(shipment, "destination", "") or "").split(",")
+        dest_city = parts[0].strip() if parts else "Unknown"
+        dest_country = parts[-1].strip() if len(parts) > 1 else "Unknown"
+
+    pipeline = build_stage_pipeline(dest_city, dest_country)
+    current_key = (getattr(shipment, "current_stage_key", None) or "").strip()
+
+    if not current_key or current_key not in [s["key"] for s in pipeline]:
+        status_str = (getattr(shipment, "status", None) or "").strip()
+        current_key = STATUS_TO_KEY.get(status_str, "label_created")
+
+    result = []
+    current_idx = next(
+        (i for i, s in enumerate(pipeline) if s["key"] == current_key), 0
+    )
+
+    for i, stage in enumerate(pipeline):
+        result.append({
+            "index": i,
+            "key": stage["key"],
+            "label": stage["label"],
+            "location": stage["location"],
+            "requires_payment": stage["requires_payment"],
+            "is_completed": i < current_idx,
+            "is_current": i == current_idx,
+            "is_future": i > current_idx,
+        })
+
+    return result

@@ -50,6 +50,10 @@ class Shipment(models.Model):
     recentEvent = models.JSONField(default=default_recent_event)
     allEvents = models.JSONField(default=default_all_events)
     shipmentDetails = models.JSONField(default=default_shipment_details)
+    destination_city = models.CharField(max_length=100, blank=True, default='')
+    destination_country = models.CharField(max_length=100, blank=True, default='')
+    current_stage_key = models.CharField(max_length=50, blank=True, default='label_created')
+    current_stage_index = models.IntegerField(default=0)
 
     def __str__(self):
         return self.trackingId

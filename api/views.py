@@ -16,7 +16,11 @@ from django.conf import settings  # Added missing import
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from .models import SiteSettings 
-from .ai_shipment_generator import generate_shipment_data, smart_advance_shipment
+from .ai_shipment_generator import (
+    generate_shipment_data,
+    advance_shipment_stage,
+    get_stage_pipeline_for_admin,
+)
 
 # Re-initialize Pusher so the webhooks can trigger UI updates
 pusher_client = pusher.Pusher(
@@ -966,39 +970,74 @@ def ai_generate_shipment(request):
         )
 
     try:
-        result = generate_shipment_data(destination_city, destination_country)
-        if result['success']:
-            return Response({'success': True, 'data': result['data']}, status=status.HTTP_200_OK)
-        else:
-            return Response({'success': False, 'error': result['error']}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-    except ValueError as e:
-        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        data = generate_shipment_data(destination_city, destination_country)
+        return Response({'success': True, 'data': data}, status=status.HTTP_200_OK)
     except Exception as e:
         logger.error(f"AI generate error: {e}")
-        return Response({'error': 'Unexpected error. Check server logs.'}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 @csrf_exempt
 @api_view(['POST'])
 def ai_advance_stage(request):
     """
-    Advances an existing shipment to its next logical stage.
-    Expects: { "current_data": { ...full shipment fields... } }
-    Returns: updated shipment data with new event appended.
+    Advances an existing shipment to the next stage OR jumps to a specific stage.
+    Expects:
+      { "shipment_id": 42 }                                       → next stage
+      { "shipment_id": 42, "target_stage_key": "held_customs" }  → jump to stage
+    Returns: updated stage fields to apply to the admin form.
     Admin-only.
     """
     if not request.user.is_authenticated or not request.user.is_staff:
         return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
 
-    current_data = request.data.get('current_data')
-    if not current_data:
-        return Response({'error': 'current_data is required.'}, status=status.HTTP_400_BAD_REQUEST)
+    shipment_id = request.data.get('shipment_id')
+    target_stage_key = request.data.get('target_stage_key', None)
+
+    if not shipment_id:
+        return Response({'error': 'shipment_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
 
     try:
-        result = smart_advance_shipment(current_data)
-        if result['success']:
-            return Response({'success': True, 'data': result['data'], 'stages_filled': result.get('stages_filled', 1), 'message': result.get('message', '')}, status=status.HTTP_200_OK)
-        else:
-            return Response({'success': False, 'error': result['error']}, status=status.HTTP_400_BAD_REQUEST)
+        shipment = Shipment.objects.get(pk=shipment_id)
+    except Shipment.DoesNotExist:
+        return Response({'error': f'Shipment {shipment_id} not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        result = advance_shipment_stage(shipment, target_stage_key=target_stage_key)
+        return Response({
+            'success': True,
+            'data': result,
+            'stages_filled': result.get('_stages_added', 1),
+            'message': result.get('_jumped_to_label', ''),
+        }, status=status.HTTP_200_OK)
+    except ValueError as e:
+        return Response({'success': False, 'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
     except Exception as e:
         logger.error(f"AI advance stage error: {e}")
         return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+@api_view(['GET'])
+def ai_stage_pipeline(request):
+    """
+    GET /api/admin/ai-stage-pipeline/?shipment_id=42
+    Returns the full stage pipeline with is_current / is_completed / is_future markers.
+    Used by the admin stage selector panel.
+    """
+    if not request.user.is_authenticated or not request.user.is_staff:
+        return Response({'error': 'Admin access required'}, status=status.HTTP_403_FORBIDDEN)
+
+    shipment_id = request.query_params.get('shipment_id')
+    if not shipment_id:
+        return Response({'error': 'shipment_id is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        shipment = Shipment.objects.get(pk=shipment_id)
+    except Shipment.DoesNotExist:
+        return Response({'error': f'Shipment {shipment_id} not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+    try:
+        pipeline = get_stage_pipeline_for_admin(shipment)
+        return Response({'pipeline': pipeline})
+    except Exception as e:
+        return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
