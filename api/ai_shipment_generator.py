@@ -396,6 +396,14 @@ def _parse_ts(ts_str):
     except Exception:
         return datetime.now(tz=ZoneInfo("UTC")) - timedelta(hours=12)
 
+def _parse_ts_local(ts_str, tz_name="America/Phoenix"):
+    """Parse timestamp string that was formatted in a specific local timezone."""
+    try:
+        dt = datetime.strptime(ts_str, "%Y-%m-%d at %I:%M %p")
+        return dt.replace(tzinfo=ZoneInfo(tz_name))
+    except Exception:
+        return datetime.now(tz=ZoneInfo("UTC")) - timedelta(hours=12)
+
 
 # ─── GEMINI DESCRIPTION WRITER ────────────────────────────────────────────────
 def _ai_description(stage_key, stage_label, location, dest_city, dest_country):
@@ -489,8 +497,7 @@ def generate_shipment_data(destination_city, destination_country, expected_date_
     # Label was created proportionally earlier (stage 0 = 0% of journey)
     # Total journey from label_created to delivered. If expected is 10 days from now,
     # and we're at stage 0 right now, label was created ~now (or a couple hours ago).
-    start_dt = now - timedelta(hours=random.uniform(1, 4))
-    start_dt = _snap_to_realistic_hours(start_dt, "label_created")
+    start_dt = now - timedelta(minutes=random.uniform(10, 45))
 
     first_stage = pipeline[0]
     ai_desc = _ai_description(
@@ -631,35 +638,42 @@ def advance_shipment_stage(shipment, target_stage_key=None):
         status_str = (getattr(shipment, "status", None) or "").strip()
         current_key = STATUS_TO_KEY.get(status_str, "")
 
-    # Fallback 2: scan allEvents to find the furthest stage that appears in history
-    # This handles manually-entered old shipments correctly
-    if not current_key or current_key not in pipeline_keys:
-        raw_history_check = getattr(shipment, "allEvents", None) or []
-        if isinstance(raw_history_check, str):
-            try:
-                raw_history_check = json.loads(raw_history_check)
-            except Exception:
-                raw_history_check = []
-        event_labels_in_history = {e.get("event", "").strip() for e in raw_history_check}
-        # Find the highest pipeline index that appears in the event history
-        best_index = -1
-        for pi, pstage in enumerate(pipeline):
-            if pstage["label"] in event_labels_in_history:
-                best_index = pi
-            # Also check STATUS_TO_KEY reverse match
-            for ev_label in event_labels_in_history:
-                mapped = STATUS_TO_KEY.get(ev_label, "")
-                if mapped == pstage["key"] and pi > best_index:
-                    best_index = pi
-        if best_index >= 0:
-            current_key = pipeline[best_index]["key"]
-        else:
-            current_key = "label_created"
+    # Always scan allEvents to find the furthest stage in history.
+    # This handles manually-entered journeys where current_stage_key may be
+    # stale or stuck at the model default ("label_created") even though the
+    # event history is much further along.
+    raw_history_check = getattr(shipment, "allEvents", None) or []
+    if isinstance(raw_history_check, str):
+        try:
+            raw_history_check = json.loads(raw_history_check)
+        except Exception:
+            raw_history_check = []
+    event_labels_in_history = {e.get("event", "").strip() for e in raw_history_check}
+    history_best_index = -1
+    for pi, pstage in enumerate(pipeline):
+        if pstage["label"] in event_labels_in_history:
+            history_best_index = pi
+        for ev_label in event_labels_in_history:
+            mapped = STATUS_TO_KEY.get(ev_label, "")
+            if mapped == pstage["key"] and pi > history_best_index:
+                history_best_index = pi
 
-    try:
-        current_index = pipeline_keys.index(current_key)
-    except ValueError:
+    # Resolve current index from stored key
+    if current_key and current_key in pipeline_keys:
+        key_based_index = pipeline_keys.index(current_key)
+    else:
+        key_based_index = 0
+
+    # Use whichever is further — stored key or what event history shows
+    if history_best_index > key_based_index:
+        current_index = history_best_index
+        current_key = pipeline[history_best_index]["key"]
+    else:
+        current_index = key_based_index
+
+    if current_index < 0:
         current_index = 0
+        current_key = "label_created"
 
     # ── Determine target ─────────────────────────────────────────────────────
     if target_stage_key:
@@ -699,7 +713,16 @@ def advance_shipment_stage(shipment, target_stage_key=None):
 
     # ── Find journey start (first event date) ─────────────────────────────────
     if raw_history:
-        journey_start = _parse_ts(raw_history[0].get("date", ""))
+        # Extract date portion only — ignores timezone of stored string entirely.
+        # Works for Phoenix-generated shipments AND manually entered New York journeys.
+        # Hour precision doesn't matter — distribution is date-spread based.
+        try:
+            first_date_str = raw_history[0].get("date", "").split(" at ")[0]
+            journey_start = datetime.strptime(first_date_str, "%Y-%m-%d").replace(
+                hour=12, minute=0, tzinfo=ZoneInfo("UTC")
+            )
+        except Exception:
+            journey_start = now_utc - timedelta(days=5)
     else:
         journey_start = now_utc - timedelta(days=5)
 
@@ -761,13 +784,19 @@ def advance_shipment_stage(shipment, target_stage_key=None):
         if ts < journey_start:
             ts = journey_start + timedelta(minutes=random.randint(10, 30))
 
-        # Never go backwards from previous event
+        # Never go backwards — compare raw UTC datetimes, never re-parse formatted strings
         if new_events:
-            prev_dt = _parse_ts(new_events[-1]["date"])
+            prev_dt = new_events[-1]["_raw_ts"]
             if ts <= prev_dt:
                 ts = prev_dt + timedelta(minutes=random.randint(20, 60))
         elif raw_history:
-            last_dt = _parse_ts(raw_history[-1].get("date", ""))
+            try:
+                last_date_str = raw_history[-1].get("date", "").split(" at ")[0]
+                last_dt = datetime.strptime(last_date_str, "%Y-%m-%d").replace(
+                    hour=23, minute=59, tzinfo=ZoneInfo("UTC")
+                )
+            except Exception:
+                last_dt = now_utc - timedelta(hours=6)
             if ts <= last_dt:
                 ts = last_dt + timedelta(minutes=random.randint(20, 60))
 
@@ -782,12 +811,16 @@ def advance_shipment_stage(shipment, target_stage_key=None):
             "date": _format_ts(ts, stage["key"]),
             "event": stage["label"],
             "description": desc,
+            "_raw_ts": ts,  # keep raw for monotonic check — stripped before save
         })
 
     if not new_events:
         raise ValueError("No new stages to add.")
 
     # ── Build return data ────────────────────────────────────────────────────
+    # Strip internal _raw_ts before saving — not part of the schema
+    for ev in new_events:
+        ev.pop("_raw_ts", None)
     updated_history = raw_history + new_events
     latest = new_events[-1]
     target_stage = pipeline[target_index]

@@ -43,7 +43,51 @@ class TrackingIdWidget(forms.TextInput):
         return mark_safe(html + button)
 
 
+STAGE_KEY_CHOICES = [
+    ('label_created',               '1 — Label Created'),
+    ('package_received',            '2 — Package Received'),
+    ('departed_origin',             '3 — Departed Origin Facility'),
+    ('arrived_us_gateway',          '4 — Arrived at US International Gateway'),
+    ('export_clearance',            '5 — Export Clearance Completed'),
+    ('departed_us',                 '6 — Departed US — In Flight'),
+    ('in_transit_intl',             '7 — In Transit — International Flight'),
+    ('arrived_hub',                 '8 — Arrived at Regional Sorting Hub'),
+    ('departed_hub',                '9 — Departed Sorting Hub'),
+    ('arrived_destination_country', '10 — Arrived at Destination Country'),
+    ('customs_processing',          '11 — Customs Processing'),
+    ('held_customs',                '12 — Held at Customs — Payment Required'),
+    ('payment_received',            '13 — Payment Received — Customs Released'),
+    ('departed_customs',            '14 — Departed Customs — En Route'),
+    ('arrived_local',               '15 — Arrived at Local Delivery Facility'),
+    ('out_for_delivery',            '16 — Out for Delivery'),
+    ('delivered',                   '17 — Delivered'),
+]
+
 class ShipmentAdminForm(forms.ModelForm):
+    current_stage_key = forms.ChoiceField(
+        choices=STAGE_KEY_CHOICES,
+        required=False,
+        help_text="Select the current stage. Advance Stage will continue from here."
+    )
+
+    status = forms.ChoiceField(
+        choices=[
+            ('Label Created',                'Label Created'),
+            ('Package Received',             'Package Received'),
+            ('Departed Origin Facility',     'Departed Origin Facility'),
+            ('Arrived at Hub',               'Arrived at Hub'),
+            ('Departed Hub',                 'Departed Hub'),
+            ('Arrived in Destination Country', 'Arrived in Destination Country'),
+            ('Out for Delivery',             'Out for Delivery'),
+            ('Customs Hold',                 'Customs Hold'),
+            ('Pending Payment',              'Pending Payment'),
+            ('Payment Confirmed',            'Payment Confirmed'),
+            ('Delivered',                    'Delivered'),
+        ],
+        required=False,
+        help_text="Visual status shown on tracking page and admin list."
+    )
+
     class Meta:
         model = Shipment
         fields = '__all__'
@@ -279,7 +323,19 @@ class PaymentAdmin(admin.ModelAdmin):
 @admin.register(SentEmail)
 class SentEmailAdmin(admin.ModelAdmin):
     show_full_result_count = False
-    list_display = ('shipment', 'subject', 'status', 'event_time', 'provider_message_id')
+    list_display = ('recipient_info', 'subject', 'status', 'event_time', 'provider_message_id')
+
+    @admin.display(description='Shipment / Recipient')
+    def recipient_info(self, obj):
+        if obj.shipment:
+            return format_html(
+                '<span style="font-family:monospace;font-weight:600;">{}</span>'
+                '<br><small style="color:#888;">{} · {}</small>',
+                obj.shipment.trackingId,
+                obj.shipment.recipient_name or '—',
+                obj.shipment.recipient_email or '—',
+            )
+        return '—'
     list_filter = ('status', 'event_time')
     search_fields = ('shipment__recipient_name', 'subject', 'shipment__trackingId', 'shipment__recipient_email')
     list_per_page = 50
