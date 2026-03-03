@@ -25,7 +25,7 @@ class CustomEmailParams(BaseModel):
 # --- HTML TEMPLATES ---
 
 BASE_HTML_TEMPLATE = """
-<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">{heading}</h2>{main_body}</td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 5px 0; color: #555555; font-size: 12px; line-height: 1.5;">This is a transactional email regarding your creator partnership.</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
+<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">{heading}</h2>{main_body}</td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 5px 0; color: #555555; font-size: 12px; line-height: 1.5;">You are receiving this because you have an active shipment with OnTrac Courier.</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
 """
 
 STATUS_UPDATE_HTML = """
@@ -183,8 +183,8 @@ def send_transactional_email(shipment, email_type: str):
         """
 
     elif email_type == 'us_fee':
-        subject = f"Action Required: Finalize Your Milani Shipment #{shipment.trackingId}"
-        heading = "Action Required: Finalize Your Milani Shipment"
+        subject = f"Your Milani Shipment #{shipment.trackingId} — Pending Fee to Dispatch"
+        heading = "One Step Left to Dispatch Your Milani Shipment"
         amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
@@ -195,51 +195,51 @@ def send_transactional_email(shipment, email_type: str):
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>This is an automated payment notice from OnTrac Courier regarding your Milani Cosmetics shipment.</p>
-            <p>Your package has been processed and is ready for dispatch, pending settlement of an outstanding logistics and priority handling fee.</p>
+            <p>Your Milani Cosmetics shipment has been processed and is nearly ready to go.</p>
+            <p>There is a small logistics handling fee that needs to be settled before we can dispatch it to you.</p>
             {summary_table}
             <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
             <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
     elif email_type == 'customs_fee':
-        subject = f"Import Duty Notice — Action Required for Shipment #{shipment.trackingId} ({shipment.country or 'International'})"
-        heading = "Import Duty Notice — Action Required"
+        subject = f"Your Milani Shipment #{shipment.trackingId} — Import Fee Update"
+        heading = "Import Fee Update for Your Milani Shipment"
         amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Hold Location:</strong></td><td>{shipment.country or 'International'} Customs</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Hold Location:</strong></td><td>{shipment.destination or shipment.country or 'Customs Facility'}</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Import Duty Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>OnTrac Courier has been notified by customs authorities in <strong>{shipment.country or 'your country'}</strong> that your Milani Cosmetics shipment is subject to a standard import duty assessment.</p>
-            <p>Your package cannot be released for delivery until this fee has been settled.</p>
+            <p>Your Milani Cosmetics shipment has arrived in <strong>{shipment.country or 'your country'}</strong> and is currently going through the standard import process.</p>
+            <p>An import fee has been assessed by customs, which needs to be cleared before your package can continue its journey to you.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Clear Customs &amp; Release Shipment →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
             <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
     elif email_type == 'customs_fee_reminder':
-        subject = f"Final Notice: Customs Payment Overdue — Shipment #{shipment.trackingId} at Risk of Return"
-        heading = "Final Notice: Customs Payment Overdue"
+        subject = f"Reminder: Import Fee Pending — Shipment #{shipment.trackingId}"
+        heading = "Import Fee Still Pending — Your Milani Shipment"
         amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">OVERDUE — CUSTOMS HOLD</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Pending — Customs Hold</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p>This is a final notice regarding your Milani Cosmetics shipment currently on hold at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
-            <p>The required import duty payment has not been received. Shipments that remain uncleared are subject to daily storage charges and risk being returned to sender or destroyed by customs authorities.</p>
+            <p>Just a follow-up on your Milani Cosmetics shipment, which is still on hold at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
+            <p>The import fee for your shipment is still outstanding. Packages held at customs for an extended period may be returned to sender if unclaimed.</p>
             {summary_table}
-            <p>Immediate payment is required to prevent further action.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">SETTLE OUTSTANDING FEE →</a></div>
+            <p>Please complete the payment at your earliest convenience to get your package moving again.</p>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Import Payment →</a></div>
             <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
             <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
