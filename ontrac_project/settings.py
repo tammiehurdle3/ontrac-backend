@@ -55,9 +55,11 @@ else:
 
 ALLOWED_HOSTS = [
     'ontrac-backend.onrender.com',
+    'ontrac-backend-ru7g.onrender.com',
+    'ontrac-project.onrender.com',
     'www.ontracourier.us',
     'ontracourier.us',
-    'ontrac-backend-ru7g.onrender.com',
+    'api.ontracourier.us',
     '127.0.0.1',
     'localhost',
     '192.168.1.246',
@@ -147,6 +149,8 @@ CSRF_TRUSTED_ORIGINS = [
     'https://316c-104-234-32-179.ngrok-free.app',
     'https://a69b-136-144-33-243.ngrok-free.app',
     'https://ontrac-backend-ru7g.onrender.com',
+    'https://ontrac-project.onrender.com',
+    'https://api.ontracourier.us',
 ]
 # --- SECURE API KEY CONFIGURATION ---
 # FIX: Safely loading keys from your .env file
