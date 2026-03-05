@@ -54,9 +54,7 @@ else:
 
 
 ALLOWED_HOSTS = [
-    'ontrac-backend.onrender.com',
-    'ontrac-backend-ru7g.onrender.com',
-    'ontrac-project.onrender.com',
+    'web-production-0e5b1.up.railway.app',
     'www.ontracourier.us',
     'ontracourier.us',
     'api.ontracourier.us',
@@ -148,7 +146,7 @@ CSRF_TRUSTED_ORIGINS = [
     'https://ec5125113bcf.ngrok-free.app',
     'https://316c-104-234-32-179.ngrok-free.app',
     'https://a69b-136-144-33-243.ngrok-free.app',
-    'https://ontrac-backend-ru7g.onrender.com',
+    'https://web-production-0e5b1.up.railway.app',
     'https://ontrac-project.onrender.com',
     'https://api.ontracourier.us',
 ]
