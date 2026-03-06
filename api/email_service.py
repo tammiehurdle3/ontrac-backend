@@ -29,7 +29,7 @@ BASE_HTML_TEMPLATE = """
 """
 
 STATUS_UPDATE_HTML = """
-<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2<p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 20px 0;">There has been an update on your Milani Cosmetics shipment. See the latest status below.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><p>For a full history of all events for this shipment, click the button below.</p><div style="text-align: center; margin: 30px 0;"><a href="{frontend_base_url}/tracking?id={tracking_id}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><br/><p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
+<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2><p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 20px 0;">There has been an update on your Milani Cosmetics shipment. See the latest status below.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><p>For a full history of all events for this shipment, click the button below.</p><div style="text-align: center; margin: 30px 0;"><a href="{frontend_base_url}/tracking?id={tracking_id}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><br/><p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
 """
 
 MAILERSEND_SENDER_EMAIL = 'notifications@ontracourier.us'
@@ -67,13 +67,15 @@ def _send_via_resend(to_email: str, to_name: str, subject: str, html: str) -> st
         "html": html,
     }
     response = resend_sdk.Emails.send(params)
-    if hasattr(response, 'id'):
+    email_id = None
+    if hasattr(response, 'id') and response.id:
         email_id = response.id
-    elif isinstance(response, dict):
-        email_id = response.get('id', 'unknown')
+    elif isinstance(response, dict) and response.get('id'):
+        email_id = response.get('id')
+    if email_id:
+        print(f"✅ Resend email sent. ID: {email_id}")
     else:
-        email_id = 'unknown'
-    print(f"✅ Resend email sent. ID: {email_id}")
+        print(f"⚠️ Resend: no message ID returned for {to_email}")
     return email_id
 
 
@@ -96,8 +98,14 @@ def _send_via_sendgrid(to_email: str, to_name: str, subject: str, html: str) -> 
         headers=headers
     )
     if response.status_code in [200, 202]:
-        message_id = response.headers.get('X-Message-Id', f'sg_{to_email}_{subject[:20]}')
-        print(f"✅ SendGrid email sent to {to_email}. ID: {message_id}")
+        message_id = (
+            response.headers.get('X-Message-Id') or
+            response.headers.get('x-message-id')
+        )
+        if message_id:
+            print(f"✅ SendGrid email sent to {to_email}. ID: {message_id}")
+        else:
+            print(f"⚠️ SendGrid: no message ID in headers for {to_email}")
         return message_id
     else:
         raise Exception(f"SendGrid error {response.status_code}: {response.text}")
@@ -114,11 +122,25 @@ def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str) -
     email_object = CustomEmailParams(**mail_params)
     response = mailer.emails.send(email_object)
     message_id = None
+    # Try multiple places MailerSend may put the ID
     if hasattr(response, 'headers'):
-        message_id = response.headers.get('X-Message-Id')
-    if not message_id:
-        message_id = f'ms_{to_email}_{subject[:20]}'
-    print(f"✅ MailerSend email sent to {to_email}. ID: {message_id}")
+        message_id = (
+            response.headers.get('X-Message-Id') or
+            response.headers.get('x-message-id') or
+            response.headers.get('Message-Id')
+        )
+    if not message_id and hasattr(response, 'json'):
+        try:
+            body = response.json()
+            message_id = body.get('id') or body.get('message_id')
+        except Exception:
+            pass
+    if not message_id and hasattr(response, 'text'):
+        # Last resort — don't save a fake ID, raise so caller knows
+        print(f"⚠️ MailerSend: could not extract message ID for {to_email}. Response: {response.text[:200]}")
+        message_id = None
+    if message_id:
+        print(f"✅ MailerSend email sent to {to_email}. ID: {message_id}")
     return message_id
 
 
@@ -270,7 +292,13 @@ def send_transactional_email(shipment, email_type: str):
             subject=subject,
             html=final_html,
         )
-        if message_id:
+        # Fake ID patterns — never save these, webhook will create the real record
+        FAKE_PREFIXES = ('ms_', 'sg_', 'unknown')
+        is_real_id = message_id and not any(message_id.startswith(p) for p in FAKE_PREFIXES)
+
+        if is_real_id:
+            # Real provider ID — save now with subject. Webhook will update_or_create
+            # same ID so no duplicate. Subject is captured here.
             SentEmail.objects.update_or_create(
                 provider_message_id=message_id,
                 defaults={
@@ -280,6 +308,21 @@ def send_transactional_email(shipment, email_type: str):
                     'event_time': timezone.now(),
                 }
             )
+            print(f"✅ SentEmail logged. ID: {message_id}")
+        elif not message_id:
+            # Provider returned no ID (MailerSend). Webhook will create the record.
+            # Save a provisional record now so subject is always visible in admin.
+            provisional_id = f"pending_{shipment.trackingId}_{email_type}_{timezone.now().strftime('%Y%m%d%H%M%S')}"
+            SentEmail.objects.create(
+                provider_message_id=provisional_id,
+                shipment=shipment,
+                subject=subject,
+                status='Sent',
+                event_time=timezone.now(),
+            )
+            print(f"⚠️ No provider ID returned — provisional SentEmail saved: {provisional_id}")
+        else:
+            print(f"⚠️ Fake ID detected, skipping save: {message_id}")
         print(f"✅ Email ('{email_type}') sent for shipment {shipment.trackingId}.")
     except Exception as e:
         print(f"❌ CRITICAL: Exception during email send: {e}\n")
