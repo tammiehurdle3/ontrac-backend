@@ -45,6 +45,14 @@ class Shipment(models.Model):
     paymentAmount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     paymentCurrency = models.CharField(max_length=3, default='USD', help_text="The currency for the payment amount (e.g., USD, GBP, EUR).")
     paymentDescription = models.CharField(max_length=100, default='Shipping Fee', blank=True, help_text="What is this payment for? (e.g., Customs Fee)")
+    allowed_payment_providers = models.JSONField(
+        default=list, blank=True,
+        help_text="Leave empty for automatic ShieldClimb provider selection. Check specific providers in admin to override."
+    )
+    provider_display_order = models.CharField(
+        max_length=500, blank=True, default='',
+        help_text="Full ordered list, comma-separated. Example: robinhood,stripe,transak — overrides auto providers completely. Leave empty to use auto + extras above."
+    )
     requiresPayment = models.BooleanField(default=False)
     progressLabels = models.JSONField(default=default_progress_labels)
     recentEvent = models.JSONField(default=default_recent_event)

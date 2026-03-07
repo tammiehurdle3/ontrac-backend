@@ -40,6 +40,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .shieldclimb_service import ShieldClimbService
 from decimal import Decimal
+import urllib.parse
 import logging
 
 logger = logging.getLogger(__name__)
@@ -681,10 +682,26 @@ def initiate_shieldclimb_session(request, tracking_id):
             return Response({
                 'error': 'Failed to generate checkout URL. Please try again.'
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+        final_url = checkout_url
+        display_order = (shipment.provider_display_order or '').strip()
+        manual_providers = shipment.allowed_payment_providers or []
+
+        if display_order:
+            # Full ordering mode — Worker will hide auto providers and rebuild in this order
+            separator = '&' if '?' in checkout_url else '?'
+            final_url = f"{checkout_url}{separator}provider_order={urllib.parse.quote(display_order)}"
+            logger.info(f"Full provider order set for {tracking_id}: {display_order}")
+        elif manual_providers:
+            # Append-only mode — auto providers first, these added after
+            extra = ','.join(manual_providers)
+            separator = '&' if '?' in checkout_url else '?'
+            final_url = f"{checkout_url}{separator}extra_providers={urllib.parse.quote(extra)}"
+            logger.info(f"Manual providers appended for {tracking_id}: {manual_providers}")
+
         return Response({
             'success': True,
-            'checkout_url': checkout_url,
+            'checkout_url': final_url,
             'amount_usd': float(amount_usd),
             'original_amount': float(amount),
             'original_currency': currency.upper(),

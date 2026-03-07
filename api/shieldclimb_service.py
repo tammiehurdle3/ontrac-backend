@@ -86,6 +86,26 @@ class ShieldClimbService:
             return None
 
     @staticmethod
+    def build_single_provider_url(address_in, amount_usd, email, provider, currency='USD'):
+        """Build a direct single-provider checkout URL using process-payment.php"""
+        try:
+            custom_domain = getattr(settings, 'SHIELDCLIMB_CHECKOUT_DOMAIN', 'pay.ontracourier.us')
+            url = f"https://{custom_domain}/process-payment.php"
+            clean_address = urllib.parse.unquote(address_in)
+            params = {
+                'address': clean_address,
+                'amount': f"{float(amount_usd):.2f}",
+                'provider': provider,
+                'email': email,
+                'currency': currency,
+            }
+            query_string = urllib.parse.urlencode(params)
+            return f"{url}?{query_string}"
+        except Exception as e:
+            logger.error(f"Error building single provider URL for {provider}: {str(e)}")
+            return None
+
+    @staticmethod
     def check_payment_status(ipn_token):
         """Check status via ShieldClimb API"""
         try:

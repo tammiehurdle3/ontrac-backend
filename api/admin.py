@@ -43,6 +43,152 @@ class TrackingIdWidget(forms.TextInput):
         return mark_safe(html + button)
 
 
+class SortableProviderWidget(forms.Widget):
+    """Click to add, drag or use arrows to reorder. Saves as comma-separated string."""
+    def __init__(self, choices, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.choices = choices
+
+    def render(self, name, value, attrs=None, renderer=None):
+        current = [p.strip() for p in (value or '').split(',') if p.strip()]
+        all_ids = [c[0] for c in self.choices]
+        label_map = dict(self.choices)
+        available = [c for c in all_ids if c not in current]
+
+        selected_html = ''
+        for p in current:
+            label = label_map.get(p, p)
+            selected_html += f'''
+            <div class="sp-item" data-id="{p}" draggable="true"
+                style="display:flex;align-items:center;justify-content:space-between;
+                       padding:6px 10px;margin:3px 0;background:#1e3a2e;border:1px solid #4a9a6a;
+                       border-radius:4px;cursor:grab;font-size:12px;">
+                <span>☰ &nbsp;{label}</span>
+                <div style="display:flex;gap:4px">
+                    <button type="button" onclick="spUp(this)"
+                        style="padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #999;border-radius:3px;background:#fff">▲</button>
+                    <button type="button" onclick="spDown(this)"
+                        style="padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #999;border-radius:3px;background:#fff">▼</button>
+                    <button type="button" onclick="spRemove(this)"
+                        style="padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #f44;border-radius:3px;background:#fff;color:#c00">✕</button>
+                </div>
+            </div>'''
+
+        available_html = ''
+        for pid in available:
+            label = label_map.get(pid, pid)
+            available_html += f'''
+            <div class="sp-avail" data-id="{pid}"
+                onclick="spAdd(this)"
+                style="display:inline-block;padding:4px 10px;margin:3px;background:#2a2a2a;
+                       border:1px solid #555;border-radius:12px;cursor:pointer;font-size:12px;color:#e0e0e0;"
+                onmouseover="this.style.background='#1a3a5c'"
+                onmouseout="this.style.background='#2a2a2a'">
+                + {label}
+            </div>'''
+
+        uid = (attrs or {}).get('id', name)
+        return mark_safe(f'''
+        <input type="hidden" name="{name}" id="{uid}" value="{','.join(current)}">
+        <div style="display:flex;gap:16px;flex-wrap:wrap;margin-top:6px">
+            <div style="flex:1;min-width:220px">
+                <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:4px;text-transform:uppercase;">
+                    Selected Order (drag or use arrows)
+                </div>
+                <div id="sp-selected-{uid}" style="min-height:40px;padding:4px;background:#1a1a1a;
+                     border:1px dashed #555;border-radius:4px;">
+                    {selected_html}
+                </div>
+            </div>
+            <div style="flex:2;min-width:280px">
+                <div style="font-size:11px;font-weight:700;color:#666;margin-bottom:4px;text-transform:uppercase;">
+                    Available — click to add
+                </div>
+                <div id="sp-avail-{uid}" style="padding:4px;background:#1a1a1a;
+                     border:1px dashed #555;border-radius:4px;">
+                    {available_html}
+                </div>
+            </div>
+        </div>
+        <script>
+        (function(){{
+            var selBox = document.getElementById('sp-selected-{uid}');
+            var availBox = document.getElementById('sp-avail-{uid}');
+            var hidden = document.getElementById('{uid}');
+            var labelMap = {label_map};
+
+            function sync() {{
+                var ids = Array.from(selBox.querySelectorAll('.sp-item')).map(function(el){{ return el.dataset.id; }});
+                hidden.value = ids.join(',');
+            }}
+
+            window.spAdd = window.spAdd || function(){{}};
+            window.spRemove = window.spRemove || function(){{}};
+            window.spUp = window.spUp || function(){{}};
+            window.spDown = window.spDown || function(){{}};
+
+            availBox.addEventListener('click', function(e){{
+                var chip = e.target.closest('.sp-avail');
+                if (!chip) return;
+                var pid = chip.dataset.id;
+                var label = labelMap[pid] || pid;
+                var div = document.createElement('div');
+                div.className = 'sp-item';
+                div.dataset.id = pid;
+                div.draggable = true;
+                div.style.cssText = 'display:flex;align-items:center;justify-content:space-between;padding:6px 10px;margin:3px 0;background:#1e3a2e;border:1px solid #4a9a6a;border-radius:4px;cursor:grab;font-size:12px;color:#e0e0e0;';
+                div.innerHTML = '<span>☰ &nbsp;' + label + '</span><div style="display:flex;gap:4px"><button type="button" onclick="javascript:void(0)" style="padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #999;border-radius:3px;background:#fff">▲</button><button type="button" style="padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #999;border-radius:3px;background:#fff">▼</button><button type="button" style="padding:1px 7px;font-size:11px;cursor:pointer;border:1px solid #f44;border-radius:3px;background:#fff;color:#c00">✕</button></div>';
+                var btns = div.querySelectorAll('button');
+                btns[0].onclick = function(){{ spUpEl(div); }};
+                btns[1].onclick = function(){{ spDownEl(div); }};
+                btns[2].onclick = function(){{ spRemoveEl(div, pid); }};
+                addDrag(div);
+                selBox.appendChild(div);
+                chip.remove();
+                sync();
+            }});
+
+            function spUpEl(el){{ if(el.previousElementSibling) {{ selBox.insertBefore(el, el.previousElementSibling); sync(); }} }}
+            function spDownEl(el){{ if(el.nextElementSibling) {{ selBox.insertBefore(el.nextElementSibling, el); sync(); }} }}
+            function spRemoveEl(el, pid){{
+                var label = labelMap[pid] || pid;
+                var chip = document.createElement('div');
+                chip.className = 'sp-avail';
+                chip.dataset.id = pid;
+                chip.style.cssText = 'display:inline-block;padding:4px 10px;margin:3px;background:#2a2a2a;border:1px solid #555;border-radius:12px;cursor:pointer;font-size:12px;color:#e0e0e0;';
+                chip.innerHTML = '+ ' + label;
+                chip.onmouseover = function(){{ this.style.background='#1a3a5c'; }};
+                chip.onmouseout = function(){{ this.style.background='#2a2a2a'; }};
+                availBox.appendChild(chip);
+                el.remove();
+                sync();
+            }}
+
+            // Wire up existing items
+            selBox.querySelectorAll('.sp-item').forEach(function(div){{
+                var pid = div.dataset.id;
+                var btns = div.querySelectorAll('button');
+                btns[0].onclick = function(){{ spUpEl(div); }};
+                btns[1].onclick = function(){{ spDownEl(div); }};
+                btns[2].onclick = function(){{ spRemoveEl(div, pid); }};
+                addDrag(div);
+            }});
+
+            // Drag and drop
+            var dragSrc = null;
+            function addDrag(el){{
+                el.addEventListener('dragstart', function(){{ dragSrc = el; el.style.opacity='0.4'; }});
+                el.addEventListener('dragend', function(){{ el.style.opacity='1'; sync(); }});
+                el.addEventListener('dragover', function(e){{ e.preventDefault(); }});
+                el.addEventListener('drop', function(e){{
+                    e.preventDefault();
+                    if(dragSrc !== el) {{ selBox.insertBefore(dragSrc, el); sync(); }}
+                }});
+            }}
+        }})();
+        </script>
+        ''')
+
 STAGE_KEY_CHOICES = [
     ('label_created',               '1 — Label Created'),
     ('package_received',            '2 — Package Received'),
@@ -61,6 +207,30 @@ STAGE_KEY_CHOICES = [
     ('arrived_local',               '15 — Arrived at Local Delivery Facility'),
     ('out_for_delivery',            '16 — Out for Delivery'),
     ('delivered',                   '17 — Delivered'),
+]
+
+PROVIDER_CHOICES = [
+    ('moonpay',     'MoonPay'),
+    ('rampnetwork', 'Ramp Network'),
+    ('binance',     'Binance'),
+    ('transak',     'Transak'),
+    ('guardarian',  'Guardarian'),
+    ('stripe',      'Stripe (USD only)'),
+    ('simplex',     'Simplex'),
+    ('banxa',       'Banxa'),
+    ('topper',      'Topper'),
+    ('unlimit',     'Unlimit'),
+    ('revolut',     'Revolut'),
+    ('kryptonim',   'Kryptonim'),
+    ('bitnovo',     'Bitnovo (USD only)'),
+    ('utorg',       'Utorg'),
+    ('transfi',     'TransFi (USD only)'),
+    ('sardine',     'Sardine'),
+    ('cryptix',     'Cryptix'),
+    ('robinhood',   'Robinhood (USD only)'),
+    ('interac',     'Interac (CAD only)'),
+    ('upi',         'UPI (INR only)'),
+    ('wert',        'Credit Card (Wert)'),
 ]
 
 class ShipmentAdminForm(forms.ModelForm):
@@ -87,6 +257,26 @@ class ShipmentAdminForm(forms.ModelForm):
         required=False,
         help_text="Visual status shown on tracking page and admin list."
     )
+
+    allowed_payment_providers = forms.MultipleChoiceField(
+        choices=PROVIDER_CHOICES,
+        required=False,
+        widget=forms.CheckboxSelectMultiple,
+        help_text="Leave all unchecked = automatic ShieldClimb selection. Check providers to append them after auto providers."
+    )
+
+    provider_display_order = forms.CharField(
+        required=False,
+        widget=SortableProviderWidget(choices=PROVIDER_CHOICES),
+        help_text="Click providers to add. Drag or use ▲▼ to reorder. When anything is set here, auto providers are hidden and only your order shows."
+    )
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        if self.instance and self.instance.pk:
+            self.fields['allowed_payment_providers'].initial = self.instance.allowed_payment_providers or []
+            self.fields['provider_display_order'].initial = self.instance.provider_display_order or ''
+
 
     class Meta:
         model = Shipment
@@ -240,7 +430,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         }),
         ('Payment', {
             'classes': ('collapse',),
-            'fields': ('requiresPayment', 'paymentAmount', 'paymentCurrency', 'paymentDescription')
+            'fields': ('requiresPayment', 'paymentAmount', 'paymentCurrency', 'paymentDescription', 'allowed_payment_providers', 'provider_display_order')
         }),
         ('Custom Manual Email', {
             'classes': ('collapse',),
