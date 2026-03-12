@@ -231,7 +231,7 @@ def send_transactional_email(shipment, email_type: str):
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Hold Location:</strong></td><td>{shipment.destination or shipment.country or 'Customs Facility'}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Hold Location:</strong></td><td>{(shipment.recentEvent or {}).get('location', None) or shipment.destination or 'Customs Facility'}</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Import Duty Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
@@ -240,10 +240,10 @@ def send_transactional_email(shipment, email_type: str):
             <p>Your Milani Cosmetics shipment has arrived in <strong>{shipment.country or 'your country'}</strong> and is currently going through the standard import process.</p>
             <p>An import fee has been assessed by customs, which needs to be cleared before your package can continue its journey to you.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
-            <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Complete Payment</a></div>
+            <p style="font-size: 14px; color: #555555; margin: 20px 0 0 0; line-height: 1.6;">Upon payment confirmation, your shipment will be immediately released and dispatched to the local carrier for final delivery. Our support team is available 24/7 via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a>.</p>
+            <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
-
     elif email_type == 'customs_fee_reminder':
         subject = f"Reminder: Import Fee Pending — Shipment #{shipment.trackingId}"
         heading = "Import Fee Still Pending — Your Milani Shipment"
@@ -261,9 +261,9 @@ def send_transactional_email(shipment, email_type: str):
             <p>The import fee for your shipment is still outstanding. Packages held at customs for an extended period may be returned to sender if unclaimed.</p>
             {summary_table}
             <p>Please complete the payment at your earliest convenience to get your package moving again.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Import Payment →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; white-space: nowrap;">Complete Import Payment</a></div>
             <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
-            <p>Thank you,<br><strong>OnTrac Courier</strong></p>
+            <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
 
     elif email_type == 'status_update':
