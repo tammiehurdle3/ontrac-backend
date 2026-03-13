@@ -207,6 +207,10 @@ STAGE_KEY_CHOICES = [
     ('arrived_local',               '15 — Arrived at Local Delivery Facility'),
     ('out_for_delivery',            '16 — Out for Delivery'),
     ('delivered',                   '17 — Delivered'),
+    # Domestic US only
+    ('arrived_sort_facility',       'D4 — Arrived at Regional Sort Facility'),
+    ('held_delivery',               'D5 — Delivery Exception — Redelivery Fee Required'),
+    ('payment_received_domestic',   'D6 — Redelivery Fee Confirmed — Rescheduled'),
 ]
 
 PROVIDER_CHOICES = [
@@ -242,17 +246,21 @@ class ShipmentAdminForm(forms.ModelForm):
 
     status = forms.ChoiceField(
         choices=[
-            ('Label Created',                'Label Created'),
-            ('Package Received',             'Package Received'),
-            ('Departed Origin Facility',     'Departed Origin Facility'),
-            ('Arrived at Hub',               'Arrived at Hub'),
-            ('Departed Hub',                 'Departed Hub'),
+            # International
+            ('Label Created',                  'Label Created'),
+            ('Package Received',               'Package Received'),
+            ('Departed Origin Facility',       'Departed Origin Facility'),
+            ('Arrived at Hub',                 'Arrived at Hub'),
+            ('Departed Hub',                   'Departed Hub'),
             ('Arrived in Destination Country', 'Arrived in Destination Country'),
-            ('Out for Delivery',             'Out for Delivery'),
-            ('Customs Hold',                 'Customs Hold'),
-            ('Pending Payment',              'Pending Payment'),
-            ('Payment Confirmed',            'Payment Confirmed'),
-            ('Delivered',                    'Delivered'),
+            ('Out for Delivery',               'Out for Delivery'),
+            ('Customs Hold',                   'Customs Hold'),
+            ('Pending Payment',                'Pending Payment'),
+            ('Payment Confirmed',              'Payment Confirmed'),
+            ('Delivered',                      'Delivered'),
+            # Domestic US
+            ('Arrived at Sort Facility',       'Arrived at Sort Facility (Domestic)'),
+            ('Delivery Exception',             'Delivery Exception (Domestic)'),
         ],
         required=False,
         help_text="Visual status shown on tracking page and admin list."

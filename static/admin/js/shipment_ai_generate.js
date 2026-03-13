@@ -15,6 +15,52 @@
 
   const API_BASE = window.location.origin;
 
+  // ── LocationIQ API key — paste yours here ─────────────────────────────────
+  const LOCATIONIQ_KEY = "pk.b2485230a3e74fa3dc1683c2de445e78";
+
+  // ── US state name → abbreviation ──────────────────────────────────────────
+  const US_STATE_ABBR = {
+    "Alabama":"AL","Alaska":"AK","Arizona":"AZ","Arkansas":"AR","California":"CA",
+    "Colorado":"CO","Connecticut":"CT","Delaware":"DE","Florida":"FL","Georgia":"GA",
+    "Hawaii":"HI","Idaho":"ID","Illinois":"IL","Indiana":"IN","Iowa":"IA","Kansas":"KS",
+    "Kentucky":"KY","Louisiana":"LA","Maine":"ME","Maryland":"MD","Massachusetts":"MA",
+    "Michigan":"MI","Minnesota":"MN","Mississippi":"MS","Missouri":"MO","Montana":"MT",
+    "Nebraska":"NE","Nevada":"NV","New Hampshire":"NH","New Jersey":"NJ",
+    "New Mexico":"NM","New York":"NY","North Carolina":"NC","North Dakota":"ND",
+    "Ohio":"OH","Oklahoma":"OK","Oregon":"OR","Pennsylvania":"PA","Rhode Island":"RI",
+    "South Carolina":"SC","South Dakota":"SD","Tennessee":"TN","Texas":"TX","Utah":"UT",
+    "Vermont":"VT","Virginia":"VA","Washington":"WA","West Virginia":"WV",
+    "Wisconsin":"WI","Wyoming":"WY","District of Columbia":"DC"
+  };
+
+  // ── Country → currency (mirrors backend map) ──────────────────────────────
+  const COUNTRY_CURRENCY_JS = {
+    "united states":"USD","united states of america":"USD","usa":"USD","us":"USD","united kingdom":"GBP","uk":"GBP","great britain":"GBP",
+    "spain":"EUR","france":"EUR","germany":"EUR","italy":"EUR","netherlands":"EUR",
+    "belgium":"EUR","portugal":"EUR","austria":"EUR","finland":"EUR","greece":"EUR",
+    "ireland":"EUR","croatia":"EUR","sweden":"SEK","norway":"NOK","denmark":"DKK",
+    "switzerland":"CHF","poland":"PLN","czech republic":"CZK","hungary":"HUF",
+    "romania":"RON","canada":"CAD","australia":"AUD","new zealand":"NZD",
+    "japan":"JPY","south korea":"KRW","china":"CNY","hong kong":"HKD",
+    "singapore":"SGD","india":"INR","thailand":"THB","malaysia":"MYR",
+    "indonesia":"IDR","philippines":"PHP","vietnam":"VND","uae":"AED",
+    "saudi arabia":"SAR","qatar":"QAR","kuwait":"KWD","israel":"ILS","turkey":"TRY",
+    "brazil":"BRL","mexico":"MXN","colombia":"COP","argentina":"ARS","chile":"CLP",
+    "peru":"PEN","south africa":"ZAR","nigeria":"NGN","kenya":"KES",
+    "egypt":"EGP","ghana":"GHS"
+  };
+
+  function getCurrencyForCountry(country) {
+    return COUNTRY_CURRENCY_JS[(country || "").toLowerCase().trim()] || "USD";
+  }
+
+  function autofillCurrency(country) {
+    const currencyEl = document.querySelector("#id_paymentCurrency");
+    if (currencyEl && country) {
+      currencyEl.value = getCurrencyForCountry(country);
+    }
+  }
+
   // ── Utility: get Django admin CSRF token ──────────────────────────────────
   function getCsrf() {
     const el = document.querySelector("[name=csrfmiddlewaretoken]");
@@ -43,23 +89,41 @@
   // ── Nominatim lookup (OpenStreetMap, free, no API key) ───────────────────
   var _nominatimTimer = null;
 
-  async function lookupAddressNominatim(raw) {
-    var url = "https://nominatim.openstreetmap.org/search?" + new URLSearchParams({
+  async function lookupAddressLocationIQ(raw) {
+    if (!LOCATIONIQ_KEY || LOCATIONIQ_KEY === "YOUR_LOCATIONIQ_KEY_HERE") {
+      throw new Error("LocationIQ key not set — add your key to LOCATIONIQ_KEY in shipment_ai_generate.js");
+    }
+    var url = "https://us1.locationiq.com/v1/search?" + new URLSearchParams({
+      key: LOCATIONIQ_KEY,
       q: raw,
       format: "json",
       addressdetails: "1",
       limit: "1",
+      "accept-language": "en",
     });
-    var resp = await fetch(url, {
-      headers: { "Accept-Language": "en", "User-Agent": "OnTracAdminTool/1.0" }
-    });
+    var resp = await fetch(url);
+    if (!resp.ok) throw new Error("LocationIQ error: " + resp.status);
     var data = await resp.json();
     if (!data || !data.length) return null;
     var addr = data[0].address || {};
-    // Nominatim returns city/town/village/municipality — pick best available
     var city = addr.city || addr.town || addr.village || addr.municipality || addr.county || "";
     var country = addr.country || "";
     var zip = addr.postcode || "";
+    var state = addr.state || "";
+
+    // Normalize country name — LocationIQ returns "United States of America"
+    var countryLower = country.toLowerCase();
+    if (countryLower === "united states of america") {
+      country = "United States";
+      countryLower = "united states";
+    }
+
+    // For US addresses: format city as "Cockeysville, MD" — no country needed
+    if (countryLower === "united states") {
+      var stateAbbr = US_STATE_ABBR[state] || state;
+      if (city && stateAbbr) city = city + ", " + stateAbbr;
+    }
+
     return { city: city, country: country, zip: zip };
   }
 
@@ -84,7 +148,7 @@
 
       _nominatimTimer = setTimeout(async function() {
         try {
-          var parsed = await lookupAddressNominatim(raw);
+          var parsed = await lookupAddressLocationIQ(raw);
 
           if (!parsed || (!parsed.city && !parsed.country)) {
             if (statusEl) { statusEl.style.color = "#ff6b6b"; statusEl.textContent = "✗ Address not recognised. Check spelling or enter city/country manually."; }
@@ -108,9 +172,13 @@
             }
           }
 
+          // Auto-fill currency based on detected country
+          if (parsed.country) autofillCurrency(parsed.country);
+
           if (statusEl) {
+            var currency = getCurrencyForCountry(parsed.country);
             statusEl.style.color = "#51cf66";
-            statusEl.textContent = "✓ City: " + parsed.city + "  Country: " + parsed.country + (parsed.zip ? "  ZIP: " + parsed.zip : "");
+            statusEl.textContent = "✓ City: " + parsed.city + "  Country: " + parsed.country + (parsed.zip ? "  ZIP: " + parsed.zip : "") + "  Currency: " + currency;
           }
 
         } catch(err) {
@@ -124,6 +192,18 @@
   // ══════════════════════════════════════════════════════════════════════════
   // SECTION 1 — AI Generate Shipment Data button
   // ══════════════════════════════════════════════════════════════════════════
+  function setupCurrencyAutofill() {
+    // Auto-fill currency when country input is manually typed
+    var countryInput = document.getElementById("ai-dest-country");
+    if (!countryInput) return;
+    countryInput.addEventListener("change", function() {
+      autofillCurrency(countryInput.value.trim());
+    });
+    countryInput.addEventListener("blur", function() {
+      autofillCurrency(countryInput.value.trim());
+    });
+  }
+
   function setupGenerateButton() {
     const btn = document.getElementById("ai-generate-btn");
     if (!btn) return;
@@ -173,7 +253,8 @@
         _setField("expectedDate",        d.expectedDate);
         _setJsonField("recentEvent",     d.recentEvent);
         _setJsonField("allEvents",       d.allEvents);
-        if (d.progressLabels)   _setJsonField("progressLabels",  d.progressLabels);
+        if (d.progressLabels)    _setJsonField("progressLabels",  d.progressLabels);
+        if (d.paymentCurrency)   _setField("paymentCurrency", d.paymentCurrency);
         if (d.shipmentDetails) {
           // Preserve destinationZip already parsed from address input
           var zipInput = document.getElementById("ai-dest-zip");
@@ -421,6 +502,20 @@
       // View wraps result in {success, data, stages_filled, message}
       const d = data.data || data;
       applyStageData(d);
+      setTimeout(function() {
+        var reField = document.querySelector("#id_recentEvent");
+        if (reField) {
+          try {
+            var reData = JSON.parse(reField.value) || {};
+            var toIV = function(s) { var m = s.match(/(\d{4}-\d{2}-\d{2}) at (\d+):(\d+) (AM|PM)/); if (!m) return ""; var h = parseInt(m[2]); if (m[4]==="PM"&&h!==12) h+=12; if (m[4]==="AM"&&h===12) h=0; return m[1]+"T"+String(h).padStart(2,"0")+":"+m[3]; };
+            var ev = document.getElementById("re-event"); if (ev) ev.value = reData.event || reData.status || "";
+            var lo = document.getElementById("re-location"); if (lo) lo.value = reData.location || "";
+            var de = document.getElementById("re-description"); if (de) de.value = reData.description || "";
+            var st = document.getElementById("re-status"); if (st) st.value = reData.status || "";
+            var ts = document.getElementById("re-timestamp"); if (ts && reData.timestamp) ts.value = toIV(reData.timestamp);
+          } catch(e) {}
+        }
+      }, 500);
       const stagesFilled = d._stages_added || data.stages_filled || 1;
       const skipped = stagesFilled > 1 ? ` (filled ${stagesFilled} intermediate stages)` : "";
       setMsg(msgEl, `✓ Jumped to "${stageLabel}"${skipped}. Review then save.`, "success");
@@ -448,6 +543,8 @@
     _setJsonField("recentEvent",     d.recentEvent);
     _setJsonField("allEvents",       d.allEvents);
     if (d.progressLabels) _setJsonField("progressLabels", d.progressLabels);
+    if (d.paymentCurrency) _setField("paymentCurrency", d.paymentCurrency);
+    if (d.expectedDate)    _setField("expectedDate", d.expectedDate);
 
     // requiresPayment — handle both checkbox and text field
     const reqPay = document.querySelector("#id_requiresPayment");
@@ -456,6 +553,25 @@
         reqPay.checked = !!d.requiresPayment;
       } else {
         reqPay.value = d.requiresPayment ? "true" : "false";
+      }
+    }
+
+    // ── Timestamp mismatch warning ─────────────────────────────────────────
+    var warnEl = document.getElementById("stage-ts-mismatch-warning");
+    if (!warnEl) {
+      warnEl = document.createElement("div");
+      warnEl.id = "stage-ts-mismatch-warning";
+      warnEl.style.cssText = "display:none;margin-top:8px;padding:8px 12px;background:#2a1500;border:1px solid #ff8c42;border-radius:4px;color:#ff8c42;font-size:12px;";
+      var advBtn = document.getElementById("ai-advance-btn");
+      if (advBtn && advBtn.parentElement) advBtn.parentElement.appendChild(warnEl);
+    }
+    if (d.recentEvent && d.allEvents && d.allEvents.length > 0) {
+      var lastEvent = d.allEvents[d.allEvents.length - 1];
+      if (d.recentEvent.timestamp && lastEvent.date && d.recentEvent.timestamp !== lastEvent.date) {
+        warnEl.style.display = "block";
+        warnEl.textContent = "⚠ Timestamp mismatch — recentEvent: " + d.recentEvent.timestamp + " ≠ last allEvents: " + lastEvent.date;
+      } else {
+        warnEl.style.display = "none";
       }
     }
   }
@@ -583,10 +699,16 @@
       const cleaned = events.map(ev => {
         const copy = Object.assign({}, ev);
         delete copy._inputEl;
+        delete copy._eventEl;
+        delete copy._cityEl;
+        delete copy._descEl;
         if (ev._inputEl && ev._inputEl.value) {
           copy.date = fromInputValue(ev._inputEl.value);
           if (copy.timestamp !== undefined) copy.timestamp = copy.date;
         }
+        if (ev._eventEl) copy.event       = ev._eventEl.value.trim();
+        if (ev._cityEl)  copy.city        = ev._cityEl.value.trim();
+        if (ev._descEl)  copy.description = ev._descEl.value.trim();
         return copy;
       });
       jsonField.value = JSON.stringify(cleaned, null, 2);
@@ -598,7 +720,7 @@
 
       // Header row
       const hrow = document.createElement("div");
-      hrow.style.cssText = "display:grid;grid-template-columns:28px 1fr 200px 1fr;gap:6px;padding:4px 8px;";
+      hrow.style.cssText = "display:grid;grid-template-columns:28px 1fr 200px 140px;gap:6px;padding:4px 8px;";
       hrow.innerHTML = `
         <span style="font-size:10px;color:#555;">#</span>
         <span style="font-size:10px;color:#555;text-transform:uppercase;">Event</span>
@@ -610,49 +732,67 @@
       const eventsWithRefs = events.map(ev => Object.assign({}, ev));
 
       eventsWithRefs.forEach(function(ev, i) {
-        const row = document.createElement("div");
-        row.style.cssText = `
-          display:grid;grid-template-columns:28px 1fr 200px 1fr;gap:6px;
-          padding:5px 8px;background:#0d0d1a;border:1px solid #1e1e30;
-          border-radius:5px;align-items:center;
-        `;
+        // Card wrapper
+        const card = document.createElement("div");
+        card.style.cssText = "padding:6px 8px;background:#0d0d1a;border:1px solid #1e1e30;border-radius:5px;margin-bottom:2px;";
+
+        // Top row: index | event | datetime | city
+        const topRow = document.createElement("div");
+        topRow.style.cssText = "display:grid;grid-template-columns:28px 1fr 200px 140px;gap:6px;align-items:center;margin-bottom:4px;";
 
         const numEl = document.createElement("span");
         numEl.style.cssText = "font-size:10px;color:#444;text-align:center;";
         numEl.textContent = i + 1;
 
-        const eventEl = document.createElement("span");
-        eventEl.style.cssText = "font-size:12px;color:#c8cfe0;";
-        eventEl.textContent = ev.event || "";
+        const eventInput = document.createElement("input");
+        eventInput.type = "text";
+        eventInput.value = ev.event || "";
+        eventInput.style.cssText = "background:#1a1a2e;border:1px solid #333;border-radius:4px;color:#c8cfe0;font-size:11px;padding:3px 6px;width:100%;box-sizing:border-box;font-family:monospace;";
 
-        const inputEl = document.createElement("input");
-        inputEl.type = "datetime-local";
-        inputEl.value = toInputValue(ev.date || "");
-        inputEl.style.cssText = `
-          background:#1a1a2e;border:1px solid #333;border-radius:4px;
-          color:#d4d9ee;font-size:11px;padding:3px 6px;width:100%;
-          box-sizing:border-box;font-family:monospace;
-        `;
+        const dateInput = document.createElement("input");
+        dateInput.type = "datetime-local";
+        dateInput.value = toInputValue(ev.date || "");
+        dateInput.style.cssText = "background:#1a1a2e;border:1px solid #333;border-radius:4px;color:#d4d9ee;font-size:11px;padding:3px 6px;width:100%;box-sizing:border-box;font-family:monospace;";
 
-        const cityEl = document.createElement("span");
-        cityEl.style.cssText = "font-size:11px;color:#555;";
-        cityEl.textContent = ev.city || "";
+        const cityInput = document.createElement("input");
+        cityInput.type = "text";
+        cityInput.value = ev.city || "";
+        cityInput.style.cssText = "background:#1a1a2e;border:1px solid #333;border-radius:4px;color:#aaa;font-size:11px;padding:3px 6px;width:100%;box-sizing:border-box;font-family:monospace;";
 
-        ev._inputEl = inputEl;
-        eventsWithRefs[i]._inputEl = inputEl;
+        topRow.appendChild(numEl);
+        topRow.appendChild(eventInput);
+        topRow.appendChild(dateInput);
+        topRow.appendChild(cityInput);
 
-        inputEl.addEventListener("change", function() {
-          validateAndSync(eventsWithRefs);
+        // Bottom row: description textarea
+        const descRow = document.createElement("div");
+        descRow.style.cssText = "padding-left:34px;";
+        const descInput = document.createElement("textarea");
+        descInput.value = ev.description || "";
+        descInput.rows = 1;
+        descInput.placeholder = "Description…";
+        descInput.style.cssText = "width:100%;box-sizing:border-box;background:#1a1a2e;border:1px solid #222;border-radius:4px;color:#888;font-size:11px;padding:3px 6px;font-family:monospace;resize:vertical;";
+        descRow.appendChild(descInput);
+
+        ev._inputEl  = dateInput;
+        ev._eventEl  = eventInput;
+        ev._cityEl   = cityInput;
+        ev._descEl   = descInput;
+        eventsWithRefs[i]._inputEl = dateInput;
+        eventsWithRefs[i]._eventEl = eventInput;
+        eventsWithRefs[i]._cityEl  = cityInput;
+        eventsWithRefs[i]._descEl  = descInput;
+
+        [dateInput, eventInput, cityInput, descInput].forEach(function(el) {
+          el.addEventListener("change", function() { validateAndSync(eventsWithRefs); });
+          el.addEventListener("input",  function() { validateAndSync(eventsWithRefs); });
         });
 
-        row.appendChild(numEl);
-        row.appendChild(eventEl);
-        row.appendChild(inputEl);
-        row.appendChild(cityEl);
-        table.appendChild(row);
+        card.appendChild(topRow);
+        card.appendChild(descRow);
+        table.appendChild(card);
       });
 
-      // Initial sync to catch any existing errors
       validateAndSync(eventsWithRefs);
     }
 
@@ -878,6 +1018,7 @@
 
   function init() {
     setupAddressParser();
+    setupCurrencyAutofill();
     setupGenerateButton();
     setupAdvanceButton();
     buildStagePanelContainer();

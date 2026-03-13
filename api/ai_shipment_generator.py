@@ -44,67 +44,67 @@ except ImportError:
 
 REGION_ROUTES = {
     # UK & Ireland
-    "UNITED KINGDOM": {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol"},
-    "UK":             {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol"},
-    "IRELAND":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "London Heathrow (LHR), United Kingdom", "hub_short": "London Heathrow"},
+    "UNITED KINGDOM": {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol", "arrival_airport": "London Heathrow (LHR), United Kingdom"},
+    "UK":             {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol", "arrival_airport": "London Heathrow (LHR), United Kingdom"},
+    "IRELAND":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "London Heathrow (LHR), United Kingdom", "hub_short": "London Heathrow", "arrival_airport": "Dublin Airport (DUB), Ireland"},
     # Western Europe
-    "SPAIN":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "FRANCE":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "GERMANY":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol"},
-    "ITALY":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "NETHERLANDS":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "BELGIUM":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "PORTUGAL":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "SWEDEN":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
-    "NORWAY":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
-    "DENMARK":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "FINLAND":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub"},
-    "SWITZERLAND":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "AUSTRIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "POLAND":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "CZECH REPUBLIC": {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "HUNGARY":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "GREECE":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "ROMANIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub"},
-    "CROATIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
+    "SPAIN":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Madrid Barajas Airport (MAD), Spain"},
+    "FRANCE":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Paris Charles de Gaulle (CDG), France"},
+    "GERMANY":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Amsterdam Schiphol (AMS), Netherlands", "hub_short": "Amsterdam Schiphol", "arrival_airport": "Frankfurt Airport (FRA), Germany"},
+    "ITALY":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Rome Fiumicino Airport (FCO), Italy"},
+    "NETHERLANDS":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Amsterdam Schiphol (AMS), Netherlands"},
+    "BELGIUM":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Brussels Airport (BRU), Belgium"},
+    "PORTUGAL":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Lisbon Humberto Delgado Airport (LIS), Portugal"},
+    "SWEDEN":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub", "arrival_airport": "Stockholm Arlanda Airport (ARN), Sweden"},
+    "NORWAY":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub", "arrival_airport": "Oslo Gardermoen Airport (OSL), Norway"},
+    "DENMARK":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Copenhagen Kastrup Airport (CPH), Denmark"},
+    "FINLAND":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Copenhagen Airport (CPH), Denmark", "hub_short": "Copenhagen Hub", "arrival_airport": "Helsinki Vantaa Airport (HEL), Finland"},
+    "SWITZERLAND":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Zurich Airport (ZRH), Switzerland"},
+    "AUSTRIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Vienna International Airport (VIE), Austria"},
+    "POLAND":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Warsaw Chopin Airport (WAW), Poland"},
+    "CZECH REPUBLIC": {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Prague Václav Havel Airport (PRG), Czech Republic"},
+    "HUNGARY":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Budapest Ferenc Liszt Airport (BUD), Hungary"},
+    "GREECE":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Athens Eleftherios Venizelos Airport (ATH), Greece"},
+    "ROMANIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Leipzig/Halle Airport (LEJ), Germany", "hub_short": "Leipzig Sorting Hub", "arrival_airport": "Bucharest Henri Coandă Airport (OTP), Romania"},
+    "CROATIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Zagreb Franjo Tuđman Airport (ZAG), Croatia"},
     # Middle East
-    "UAE":            {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Istanbul Airport (IST), Turkey", "hub_short": "Istanbul Hub"},
-    "SAUDI ARABIA":   {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
-    "TURKEY":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic and Europe", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "ISRAEL":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Mediterranean", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub"},
-    "QATAR":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
-    "KUWAIT":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
+    "UAE":            {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Istanbul Airport (IST), Turkey", "hub_short": "Istanbul Hub", "arrival_airport": "Dubai International Airport (DXB), UAE"},
+    "SAUDI ARABIA":   {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub", "arrival_airport": "Riyadh King Khalid International Airport (RUH), Saudi Arabia"},
+    "TURKEY":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the North Atlantic and Europe", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Istanbul Airport (IST), Turkey"},
+    "ISRAEL":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Mediterranean", "regional_hub": "Frankfurt Airport (FRA), Germany", "hub_short": "Frankfurt Hub", "arrival_airport": "Tel Aviv Ben Gurion Airport (TLV), Israel"},
+    "QATAR":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub", "arrival_airport": "Doha Hamad International Airport (DOH), Qatar"},
+    "KUWAIT":         {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and the Arabian Peninsula", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub", "arrival_airport": "Kuwait International Airport (KWI), Kuwait"},
     # Asia Pacific
-    "AUSTRALIA":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi"},
-    "NEW ZEALAND":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Sydney Airport (SYD), Australia", "hub_short": "Sydney Hub"},
-    "JAPAN":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Incheon International (ICN), South Korea", "hub_short": "Incheon Hub"},
-    "SOUTH KOREA":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub"},
-    "CHINA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi"},
-    "HONG KONG":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi"},
-    "SINGAPORE":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub"},
-    "INDIA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean and South Asia", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
-    "THAILAND":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
-    "MALAYSIA":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
-    "INDONESIA":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
-    "PHILIPPINES":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub"},
-    "VIETNAM":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub"},
+    "AUSTRALIA":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi", "arrival_airport": "Sydney Kingsford Smith Airport (SYD), Australia"},
+    "NEW ZEALAND":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Sydney Airport (SYD), Australia", "hub_short": "Sydney Hub", "arrival_airport": "Auckland Airport (AKL), New Zealand"},
+    "JAPAN":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Incheon International (ICN), South Korea", "hub_short": "Incheon Hub", "arrival_airport": "Tokyo Narita International Airport (NRT), Japan"},
+    "SOUTH KOREA":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub", "arrival_airport": "Seoul Incheon International Airport (ICN), South Korea"},
+    "CHINA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi", "arrival_airport": "Shanghai Pudong International Airport (PVG), China"},
+    "HONG KONG":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Changi", "arrival_airport": "Hong Kong International Airport (HKG), Hong Kong"},
+    "SINGAPORE":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub", "arrival_airport": "Singapore Changi Airport (SIN), Singapore"},
+    "INDIA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean and South Asia", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub", "arrival_airport": "Delhi Indira Gandhi International Airport (DEL), India"},
+    "THAILAND":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub", "arrival_airport": "Bangkok Suvarnabhumi Airport (BKK), Thailand"},
+    "MALAYSIA":       {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub", "arrival_airport": "Kuala Lumpur International Airport (KUL), Malaysia"},
+    "INDONESIA":      {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub", "arrival_airport": "Jakarta Soekarno-Hatta International Airport (CGK), Indonesia"},
+    "PHILIPPINES":    {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Hong Kong International (HKG)", "hub_short": "Hong Kong Hub", "arrival_airport": "Manila Ninoy Aquino International Airport (MNL), Philippines"},
+    "VIETNAM":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over the Pacific Ocean", "regional_hub": "Singapore Changi (SIN)", "hub_short": "Singapore Hub", "arrival_airport": "Ho Chi Minh City Tan Son Nhat Airport (SGN), Vietnam"},
     # Latin America
-    "BRAZIL":         {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean and South America", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub"},
-    "MEXICO":         {"us_gateway": "Dallas/Fort Worth, TX (DFW)", "transit_note": "via the US-Mexico corridor", "regional_hub": "Houston Intercontinental (IAH), USA", "hub_short": "Houston Hub"},
-    "COLOMBIA":       {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean", "regional_hub": "Lima Jorge Chávez (LIM), Peru", "hub_short": "Lima Hub"},
-    "ARGENTINA":      {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "São Paulo Guarulhos (GRU), Brazil", "hub_short": "São Paulo Hub"},
-    "CHILE":          {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Buenos Aires Ezeiza (EZE), Argentina", "hub_short": "Buenos Aires Hub"},
-    "PERU":           {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub"},
-    "VENEZUELA":      {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub"},
-    "ECUADOR":        {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Lima Jorge Chávez (LIM), Peru", "hub_short": "Lima Hub"},
+    "BRAZIL":         {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean and South America", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub", "arrival_airport": "São Paulo Guarulhos International Airport (GRU), Brazil"},
+    "MEXICO":         {"us_gateway": "Dallas/Fort Worth, TX (DFW)", "transit_note": "via the US-Mexico corridor", "regional_hub": "Houston Intercontinental (IAH), USA", "hub_short": "Houston Hub", "arrival_airport": "Mexico City Benito Juárez International Airport (MEX), Mexico"},
+    "COLOMBIA":       {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean", "regional_hub": "Lima Jorge Chávez (LIM), Peru", "hub_short": "Lima Hub", "arrival_airport": "Bogotá El Dorado International Airport (BOG), Colombia"},
+    "ARGENTINA":      {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "São Paulo Guarulhos (GRU), Brazil", "hub_short": "São Paulo Hub", "arrival_airport": "Buenos Aires Ezeiza International Airport (EZE), Argentina"},
+    "CHILE":          {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Buenos Aires Ezeiza (EZE), Argentina", "hub_short": "Buenos Aires Hub", "arrival_airport": "Santiago Arturo Merino Benítez Airport (SCL), Chile"},
+    "PERU":           {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub", "arrival_airport": "Lima Jorge Chávez International Airport (LIM), Peru"},
+    "VENEZUELA":      {"us_gateway": "Miami, FL (MIA)", "transit_note": "over the Caribbean", "regional_hub": "Bogotá El Dorado (BOG), Colombia", "hub_short": "Bogotá Hub", "arrival_airport": "Caracas Simón Bolívar International Airport (CCS), Venezuela"},
+    "ECUADOR":        {"us_gateway": "Miami, FL (MIA)", "transit_note": "over South America", "regional_hub": "Lima Jorge Chávez (LIM), Peru", "hub_short": "Lima Hub", "arrival_airport": "Quito Mariscal Sucre International Airport (UIO), Ecuador"},
     # Canada
-    "CANADA":         {"us_gateway": "Seattle, WA (SEA)", "transit_note": "via the US-Canada border corridor", "regional_hub": "Chicago O'Hare (ORD), USA", "hub_short": "Chicago O'Hare"},
+    "CANADA":         {"us_gateway": "Seattle, WA (SEA)", "transit_note": "via the US-Canada border corridor", "regional_hub": "Chicago O'Hare (ORD), USA", "hub_short": "Chicago O'Hare", "arrival_airport": "Toronto Pearson International Airport (YYZ), Canada"},
     # Africa
-    "SOUTH AFRICA":   {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and sub-Saharan Africa", "regional_hub": "Nairobi Jomo Kenyatta (NBO), Kenya", "hub_short": "Nairobi Hub"},
-    "NIGERIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and West Africa", "regional_hub": "Johannesburg O.R. Tambo (JNB), South Africa", "hub_short": "Johannesburg Hub"},
-    "KENYA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and East Africa", "regional_hub": "Lagos Murtala Muhammed (LOS), Nigeria", "hub_short": "Lagos Hub"},
-    "EGYPT":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and North Africa", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub"},
-    "GHANA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and West Africa", "regional_hub": "Lagos Murtala Muhammed (LOS), Nigeria", "hub_short": "Lagos Hub"},
+    "SOUTH AFRICA":   {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and sub-Saharan Africa", "regional_hub": "Nairobi Jomo Kenyatta (NBO), Kenya", "hub_short": "Nairobi Hub", "arrival_airport": "Johannesburg O.R. Tambo International Airport (JNB), South Africa"},
+    "NIGERIA":        {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and West Africa", "regional_hub": "Johannesburg O.R. Tambo (JNB), South Africa", "hub_short": "Johannesburg Hub", "arrival_airport": "Lagos Murtala Muhammed International Airport (LOS), Nigeria"},
+    "KENYA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and East Africa", "regional_hub": "Lagos Murtala Muhammed (LOS), Nigeria", "hub_short": "Lagos Hub", "arrival_airport": "Nairobi Jomo Kenyatta International Airport (NBO), Kenya"},
+    "EGYPT":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and North Africa", "regional_hub": "Dubai International (DXB), UAE", "hub_short": "Dubai DXB Hub", "arrival_airport": "Cairo International Airport (CAI), Egypt"},
+    "GHANA":          {"us_gateway": "Los Angeles, CA (LAX)", "transit_note": "over Europe and West Africa", "regional_hub": "Lagos Murtala Muhammed (LOS), Nigeria", "hub_short": "Lagos Hub", "arrival_airport": "Accra Kotoka International Airport (ACC), Ghana"},
 }
 
 DEFAULT_ROUTE = {
@@ -112,7 +112,36 @@ DEFAULT_ROUTE = {
     "transit_note": "internationally",
     "regional_hub": "Frankfurt Airport (FRA), Germany",
     "hub_short": "Frankfurt Hub",
+    "arrival_airport": "Frankfurt Airport (FRA), Germany",
 }
+
+DOMESTIC_COUNTRIES = {"USA", "US", "UNITED STATES"}
+
+# ─── country → currency map ──────────────────────────────────────────────────
+country_currency = {
+    "usa": "usd", "us": "usd", "united states": "usd", "ecuador": "usd",
+    "united kingdom": "gbp", "uk": "gbp",
+    "spain": "eur", "france": "eur", "germany": "eur", "italy": "eur",
+    "netherlands": "eur", "belgium": "eur", "portugal": "eur", "austria": "eur",
+    "finland": "eur", "greece": "eur", "ireland": "eur", "croatia": "eur",
+    "sweden": "sek", "norway": "nok", "denmark": "dkk", "switzerland": "chf",
+    "poland": "pln", "czech republic": "czk", "hungary": "huf", "romania": "ron",
+    "canada": "cad", "australia": "aud", "new zealand": "nzd",
+    "japan": "jpy", "south korea": "krw", "china": "cny", "hong kong": "hkd",
+    "singapore": "sgd", "india": "inr", "thailand": "thb", "malaysia": "myr",
+    "indonesia": "idr", "philippines": "php", "vietnam": "vnd",
+    "uae": "aed", "saudi arabia": "sar", "qatar": "qar", "kuwait": "kwd",
+    "israel": "ils", "turkey": "try",
+    "brazil": "brl", "mexico": "mxn", "colombia": "cop", "argentina": "ars",
+    "chile": "clp", "peru": "pen", "venezuela": "ves",
+    "south africa": "zar", "nigeria": "ngn", "kenya": "kes",
+    "egypt": "egp", "ghana": "ghs",
+}
+
+def get_currency_for_country(country):
+    """returns ISO currency code for destination country. Defaults to USD."""
+    return country_currency.get(country.strip().lower(), "usd").upper()
+
 
 def _get_route(country):
     key = country.strip().upper()
@@ -131,12 +160,74 @@ def build_stage_pipeline(destination_city, destination_country):
     This is the single source of truth for routing logic.
     AI never modifies this — it only writes descriptions for each stage.
     """
+    if destination_country.strip().upper() in DOMESTIC_COUNTRIES:
+        dest = destination_city  # us: "cockeysville, md" — no country appended
+        return [
+            {
+                "key": "label_created",
+                "label": "Label Created",
+                "location": "Phoenix, AZ, USA",
+                "requires_payment": False,
+                "default_desc": "Shipping label created and registered. Package scheduled for pickup.",
+            },
+            {
+                "key": "package_received",
+                "label": "Package Received",
+                "location": "Phoenix, AZ, USA",
+                "requires_payment": False,
+                "default_desc": "Package received and scanned at OnTrac Phoenix facility. Processing initiated.",
+            },
+            {
+                "key": "departed_origin",
+                "label": "Departed Origin Facility",
+                "location": "Phoenix, AZ, USA",
+                "requires_payment": False,
+                "default_desc": "Package departed Phoenix origin facility en route to regional sort center.",
+            },
+            {
+                "key": "arrived_sort_facility",
+                "label": "Arrived at Regional Sort Facility",
+                "location": dest,
+                "requires_payment": False,
+                "default_desc": f"Package arrived at regional sort facility. Processing for final delivery in {destination_city}.",
+            },
+            {
+                "key": "out_for_delivery",
+                "label": "Out for Delivery",
+                "location": dest,
+                "requires_payment": False,
+                "default_desc": f"package with delivery driver. out for delivery in {destination_city}.",
+            },
+            {
+                "key": "held_delivery",
+                "label": "Delivery Exception — Redelivery Fee Required",
+                "location": dest,
+                "requires_payment": True,
+                "default_desc": f"Delivery attempted but unsuccessful — recipient unavailable at time of delivery. A redelivery fee is required to reschedule your delivery in {destination_city}.",
+            },
+            {
+                "key": "payment_received_domestic",
+                "label": "Redelivery Fee Confirmed — Rescheduled",
+                "location": dest,
+                "requires_payment": False,
+                "default_desc": f"Redelivery fee confirmed and processed. Package rescheduled for delivery to {destination_city}.",
+            },
+            {
+                "key": "delivered",
+                "label": "Delivered",
+                "location": dest,
+                "requires_payment": False,
+                "default_desc": f"Package successfully delivered to recipient in {destination_city}. Delivery confirmed.",
+            },
+        ]
+
     route = _get_route(destination_country)
     gw = route["us_gateway"]
     hub = route["regional_hub"]
     hub_short = route["hub_short"]
     transit = route["transit_note"]
     dest = f"{destination_city}, {destination_country}"
+    arr = route.get("arrival_airport", dest)
 
     return [
         {
@@ -205,37 +296,37 @@ def build_stage_pipeline(destination_city, destination_country):
         {
             "key": "arrived_destination_country",
             "label": "Arrived at Destination Country",
-            "location": dest,
+            "location": arr,
             "requires_payment": False,
             "default_desc": f"Package arrived at inbound clearance facility in {destination_city}. Import documentation lodged with {destination_country} customs authority.",
         },
         {
             "key": "customs_processing",
             "label": "Customs Processing",
-            "location": dest,
+            "location": arr,
             "requires_payment": False,
             "default_desc": f"Shipment is currently under review by {destination_country} customs authority. Import duties and applicable taxes are being assessed. Further updates will follow.",
         },
         {
             "key": "held_customs",
             "label": "Held at Customs — Payment Required",
-            "location": dest,
+            "location": arr,
             "requires_payment": True,
             "default_desc": f"This shipment is held by {destination_country} customs authorities pending payment of import duties and taxes. The package will be released upon receipt of payment.",
         },
         {
             "key": "payment_received",
-            "label": "Payment Received — Customs Released",
-            "location": dest,
+            "label": "Inbound Clearance Finalized",
+            "location": arr,
             "requires_payment": False,
-            "default_desc": f"Import duty payment confirmed and processed. Package officially released by {destination_country} customs.",
+            "default_desc": f"Import duty payment confirmed and processed. Shipment officially released by {destination_country} customs authority.",
         },
         {
             "key": "departed_customs",
-            "label": "Departed Customs — En Route",
-            "location": dest,
+            "label": f"Departed {arr.split(',')[0]} — In Transit",
+            "location": arr,
             "requires_payment": False,
-            "default_desc": f"Package cleared customs facility and transferred to local delivery depot in {destination_city}.",
+            "default_desc": f"Shipment departed {arr.split(',')[0]} customs facility. Now in transit to local delivery depot in {destination_city}.",
         },
         {
             "key": "arrived_local",
@@ -280,6 +371,10 @@ STAGE_HOUR_GAPS = {
     "arrived_local":               (6, 12),
     "out_for_delivery":            (4, 8),
     "delivered":                   (2, 6),
+    # domestic us stages
+    "arrived_sort_facility":       (4, 10),
+    "held_delivery":               (6, 12),
+    "payment_received_domestic":   (1, 3),
 }
 
 
@@ -304,6 +399,10 @@ STAGE_TIMEZONE = {
     "arrived_local":               "Europe/Madrid",
     "out_for_delivery":            "Europe/Madrid",
     "delivered":                   "Europe/Madrid",
+    # Domestic US stages
+    "arrived_sort_facility":       "America/New_York",
+    "held_delivery":               "America/New_York",
+    "payment_received_domestic":   "America/New_York",
 }
 
 # Realistic LOCAL hour windows (start_hour, end_hour) for each stage
@@ -326,6 +425,10 @@ STAGE_HOUR_WINDOW = {
     "arrived_local":               (8, 15),   # local depot intake
     "out_for_delivery":            (7, 10),   # drivers depart early
     "delivered":                   (9, 19),   # delivery window
+    # domestic us stages
+    "arrived_sort_facility":       (6, 20),   # sort facility intake
+    "held_delivery":               (8, 18),   # business hours notification
+    "payment_received_domestic":   (8, 20),   # payment any time
 }
 
 def _snap_to_realistic_hours(dt_utc, stage_key):
@@ -488,8 +591,11 @@ def generate_shipment_data(destination_city, destination_country, expected_date_
         if not expected_dt:
             expected_dt = now + timedelta(days=10)
     else:
-        # Default: realistic international delivery window
-        expected_dt = now + timedelta(days=random.randint(8, 14))
+        # Domestic: 3-7 days, International: 8-14 days
+        if destination_country.strip().upper() in DOMESTIC_COUNTRIES:
+            expected_dt = now + timedelta(days=random.randint(3, 7))
+        else:
+            expected_dt = now + timedelta(days=random.randint(8, 14))
 
     # ── Label created: beginning of the journey ───────────────────────────────
     # How long ago was the label created?
@@ -530,13 +636,14 @@ def generate_shipment_data(destination_city, destination_country, expected_date_
         "current_stage_index": 0,
         "requiresPayment": False,
         "progressPercent": 0,
-        "progressLabels": VISUAL_PROGRESS_LABELS,
+        "progressLabels": DOMESTIC_VISUAL_PROGRESS_LABELS if destination_country.strip().upper() in DOMESTIC_COUNTRIES else VISUAL_PROGRESS_LABELS,
         "expectedDate": expected_dt.strftime("%B %d, %Y"),
         "recentEvent": recent_event,
         "allEvents": event_history,
         "shipmentDetails": _generate_shipment_details(destination_country),
-        "_route_us_gateway": route["us_gateway"],
-        "_route_regional_hub": route["regional_hub"],
+        "_route_us_gateway": route.get("us_gateway", ""),
+        "_route_regional_hub": route.get("regional_hub", ""),
+        "paymentcurrency": get_currency_for_country(destination_country),
     }
 
 
@@ -556,10 +663,17 @@ STATUS_TO_KEY = {
     "Customs Processing": "customs_processing",
     "Held at Customs — Payment Required": "held_customs",
     "Payment Received — Customs Released": "payment_received",
+    "Inbound Clearance Finalized": "payment_received",
     "Departed Customs — En Route": "departed_customs",
     "Arrived at Local Delivery Facility": "arrived_local",
     "Out for Delivery": "out_for_delivery",
     "Delivered": "delivered",
+    # Domestic US stages
+    "Arrived at Regional Sort Facility":      "arrived_sort_facility",
+    "Delivery Exception — Fee Required":           "held_delivery",
+    "Delivery Exception — Redelivery Fee Required": "held_delivery",
+    "Fee Confirmed — Scheduled for Redelivery":     "payment_received_domestic",
+    "Redelivery Fee Confirmed — Rescheduled":       "payment_received_domestic",
     # Legacy status strings from old system
     "Departed Hub": "departed_hub",
     "Arrived at Hub": "arrived_hub",
@@ -577,6 +691,15 @@ VISUAL_PROGRESS_LABELS = [
     "Arrived at Hub",
     "Departed Hub",
     "Arrived in Destination Country",
+    "Out for Delivery",
+    "Delivered",
+]
+
+DOMESTIC_VISUAL_PROGRESS_LABELS = [
+    "Label Created",
+    "Package Received",
+    "Departed Origin Facility",
+    "Arrived at Sort Facility",
     "Out for Delivery",
     "Delivered",
 ]
@@ -602,6 +725,11 @@ STAGE_TO_VISUAL_LABEL = {
     "arrived_local":               "Out for Delivery",
     "out_for_delivery":            "Out for Delivery",
     "delivered":                   "Delivered",
+    # Domestic US stages
+    "arrived_sort_facility":       "Arrived at Sort Facility",
+    "out_for_delivery":            "Out for Delivery",
+    "held_delivery":               "Out for Delivery",
+    "payment_received_domestic":   "Out for Delivery",
 }
 def advance_shipment_stage(shipment, target_stage_key=None):
     """
@@ -831,13 +959,19 @@ def advance_shipment_stage(shipment, target_stage_key=None):
     # Detailed label stays in allEvents event history
     visual_status = STAGE_TO_VISUAL_LABEL.get(target_stage["key"], target_stage["label"])
 
+    # When held for payment, expected date is unknown
+    expected_date_out = None
+    if target_stage["key"] in ("held_customs", "held_delivery"):
+        expected_date_out = "TBD"
+
     return {
         "status": visual_status,
         "current_stage_key": target_stage["key"],
         "current_stage_index": target_index,
         "requiresPayment": target_stage["requires_payment"],
         "progressPercent": progress,
-        "progressLabels": VISUAL_PROGRESS_LABELS,
+        "progressLabels": DOMESTIC_VISUAL_PROGRESS_LABELS if dest_country.strip().upper() in DOMESTIC_COUNTRIES else VISUAL_PROGRESS_LABELS,
+        **({"expectedDate": expected_date_out} if expected_date_out else {}),
         "recentEvent": {
             "event": latest["event"],
             "location": latest["city"],
@@ -845,6 +979,7 @@ def advance_shipment_stage(shipment, target_stage_key=None):
             "timestamp": latest["date"],
         },
         "allEvents": updated_history,
+        "paymentCurrency": get_currency_for_country(dest_country),
         # Admin feedback fields (not saved to model)
         "_stages_added": stages_added,
         "_jumped_to_label": target_stage["label"],
