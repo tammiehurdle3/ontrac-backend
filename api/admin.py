@@ -453,10 +453,32 @@ class ShipmentAdmin(admin.ModelAdmin):
                 'trigger_manual_email'
             )
         }),
-        ('Manual Email Triggers', {
+        ('Email Triggers — Domestic (USA)', {
             'classes': ('collapse',),
-            # --- THIS SECTION IS NOW CORRECTED ---
-            'fields': ('send_confirmation_email', 'send_us_fee_email', 'send_intl_tracking_email','send_intl_arrived_email', 'send_customs_fee_email','send_status_update_email','send_customs_fee_reminder_email'),
+            'description': 'Use these for US-to-US shipments only.',
+            'fields': (
+                'send_us_tracking_email',
+                'send_us_fee_email',
+                'send_us_redelivery_reminder_email',
+            ),
+        }),
+        ('Email Triggers — International', {
+            'classes': ('collapse',),
+            'description': 'Use these for shipments going outside the USA.',
+            'fields': (
+                'send_intl_tracking_email',
+                'send_intl_arrived_email',
+                'send_customs_fee_email',
+                'send_customs_fee_reminder_email',
+            ),
+        }),
+        ('Email Triggers — General', {
+            'classes': ('collapse',),
+            'description': 'Works for both domestic and international.',
+            'fields': (
+                'send_confirmation_email',
+                'send_status_update_email',
+            ),
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
@@ -478,6 +500,8 @@ class ShipmentAdmin(admin.ModelAdmin):
             'send_customs_fee_email': 'customs_fee',
             'send_status_update_email': 'status_update',
             'send_customs_fee_reminder_email': 'customs_fee_reminder',
+            'send_us_tracking_email': 'us_tracking',
+            'send_us_redelivery_reminder_email': 'us_redelivery_reminder',
         }
 
         if change:

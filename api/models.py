@@ -24,6 +24,8 @@ class Shipment(models.Model):
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
     send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
     send_customs_fee_reminder_email = models.BooleanField(default=False)
+    send_us_tracking_email = models.BooleanField(default=False, help_text="Send domestic tracking notification — package is on its way.")
+    send_us_redelivery_reminder_email = models.BooleanField(default=False, help_text="Send redelivery fee reminder for domestic shipments.")
 
     # --- MANUAL EMAIL CONTENT FIELDS ---
     manual_email_subject = models.CharField(max_length=255, blank=True, help_text="Subject line")
