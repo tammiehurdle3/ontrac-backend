@@ -46,7 +46,8 @@ class Shipment(models.Model):
     progressPercent = models.IntegerField(default=10)
     paymentAmount = models.DecimalField(max_digits=10, decimal_places=2, default=0.00)
     paymentCurrency = models.CharField(max_length=3, default='USD', help_text="The currency for the payment amount (e.g., USD, GBP, EUR).")
-    paymentDescription = models.CharField(max_length=100, default='Import Duties', blank=True, help_text="What is this payment for? (e.g., Import Duties, Customs Fee)")
+    paymentDescription = models.CharField(max_length=100, default='Import Duties', blank=True, help_text="What is this payment for? (e.g., Import Duties, Redelivery Fee) — shows next to the amount.")
+    paymentActionMessage = models.CharField(max_length=500, blank=True, default='', help_text="Custom message for the ⚠ Action Required bar on the tracking page. Leave blank for smart default.")
     allowed_payment_providers = models.JSONField(
         default=list, blank=True,
         help_text="Leave empty for automatic ShieldClimb provider selection. Check specific providers in admin to override."

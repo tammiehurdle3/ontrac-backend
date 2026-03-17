@@ -438,7 +438,7 @@ class ShipmentAdmin(admin.ModelAdmin):
         }),
         ('Payment', {
             'classes': ('collapse',),
-            'fields': ('requiresPayment', 'paymentAmount', 'paymentCurrency', 'paymentDescription', 'allowed_payment_providers', 'provider_display_order')
+            'fields': ('requiresPayment', 'paymentAmount', 'paymentCurrency', 'paymentDescription', 'paymentActionMessage', 'allowed_payment_providers', 'provider_display_order')
         }),
         ('Custom Manual Email', {
             'classes': ('collapse',),
