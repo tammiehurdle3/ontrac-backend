@@ -196,7 +196,7 @@ def build_stage_pipeline(destination_city, destination_country):
                 "label": "Out for Delivery",
                 "location": dest,
                 "requires_payment": False,
-                "default_desc": f"package with delivery driver. out for delivery in {destination_city}.",
+                "default_desc": f"Package with delivery driver. Out for delivery in {destination_city}.",
             },
             {
                 "key": "held_delivery",
@@ -298,28 +298,28 @@ def build_stage_pipeline(destination_city, destination_country):
             "label": "Arrived at Destination Country",
             "location": arr,
             "requires_payment": False,
-            "default_desc": f"Package arrived at inbound clearance facility in {destination_city}. Import documentation lodged with {destination_country} customs authority.",
+            "default_desc": f"Package arrived at {arr.split(',')[0]}. Import documentation lodged with {destination_country} customs authority.",
         },
         {
             "key": "customs_processing",
             "label": "Customs Processing",
             "location": arr,
             "requires_payment": False,
-            "default_desc": f"Shipment is currently under review by {destination_country} customs authority. Import duties and applicable taxes are being assessed. Further updates will follow.",
+            "default_desc": f"Shipment held at {arr.split(',')[0]} under review by {destination_country} customs authority. Import duties and applicable taxes are being assessed.",
         },
         {
             "key": "held_customs",
             "label": "Held at Customs — Payment Required",
             "location": arr,
             "requires_payment": True,
-            "default_desc": f"This shipment is held by {destination_country} customs authorities pending payment of import duties and taxes. The package will be released upon receipt of payment.",
+            "default_desc": f"Shipment held at {arr.split(',')[0]} by {destination_country} customs authorities pending payment of import duties and taxes. Package will be released upon receipt of payment.",
         },
         {
             "key": "payment_received",
             "label": "Inbound Clearance Finalized",
             "location": arr,
             "requires_payment": False,
-            "default_desc": f"Import duty payment confirmed and processed. Shipment officially released by {destination_country} customs authority.",
+            "default_desc": f"Import duty payment confirmed. Shipment officially released by {destination_country} customs authority at {arr.split(',')[0]}.",
         },
         {
             "key": "departed_customs",
@@ -341,6 +341,20 @@ def build_stage_pipeline(destination_city, destination_country):
             "location": dest,
             "requires_payment": False,
             "default_desc": f"Package with delivery driver. Estimated delivery today in {destination_city}.",
+        },
+        {
+            "key": "redelivery_intl",
+            "label": "Delivery Exception — Redelivery Fee Required",
+            "location": dest,
+            "requires_payment": True,
+            "default_desc": f"Delivery attempted but unsuccessful — recipient unavailable at time of delivery. A redelivery fee is required to reschedule delivery in {destination_city}.",
+        },
+        {
+            "key": "redelivery_intl_confirmed",
+            "label": "Redelivery Fee Confirmed — Rescheduled",
+            "location": dest,
+            "requires_payment": False,
+            "default_desc": f"Redelivery fee confirmed. Package rescheduled for delivery to {destination_city}.",
         },
         {
             "key": "delivered",
@@ -375,6 +389,9 @@ STAGE_HOUR_GAPS = {
     "arrived_sort_facility":       (4, 10),
     "held_delivery":               (6, 12),
     "payment_received_domestic":   (1, 3),
+    # international redelivery
+    "redelivery_intl":             (6, 12),
+    "redelivery_intl_confirmed":   (1, 3),
 }
 
 
@@ -403,6 +420,9 @@ STAGE_TIMEZONE = {
     "arrived_sort_facility":       "America/New_York",
     "held_delivery":               "America/New_York",
     "payment_received_domestic":   "America/New_York",
+    # International redelivery
+    "redelivery_intl":             "Europe/Madrid",
+    "redelivery_intl_confirmed":   "Europe/Madrid",
 }
 
 # Realistic LOCAL hour windows (start_hour, end_hour) for each stage
@@ -429,6 +449,9 @@ STAGE_HOUR_WINDOW = {
     "arrived_sort_facility":       (6, 20),   # sort facility intake
     "held_delivery":               (8, 18),   # business hours notification
     "payment_received_domestic":   (8, 20),   # payment any time
+    # international redelivery
+    "redelivery_intl":             (8, 18),
+    "redelivery_intl_confirmed":   (8, 20),
 }
 
 def _snap_to_realistic_hours(dt_utc, stage_key):
@@ -674,6 +697,9 @@ STATUS_TO_KEY = {
     "Delivery Exception — Redelivery Fee Required": "held_delivery",
     "Fee Confirmed — Scheduled for Redelivery":     "payment_received_domestic",
     "Redelivery Fee Confirmed — Rescheduled":       "payment_received_domestic",
+    # International redelivery
+    "Delivery Exception — Redelivery Fee Required": "redelivery_intl",
+    "Redelivery Fee Confirmed — Rescheduled":       "redelivery_intl_confirmed",
     # Legacy status strings from old system
     "Departed Hub": "departed_hub",
     "Arrived at Hub": "arrived_hub",
@@ -730,6 +756,9 @@ STAGE_TO_VISUAL_LABEL = {
     "out_for_delivery":            "Out for Delivery",
     "held_delivery":               "Out for Delivery",
     "payment_received_domestic":   "Out for Delivery",
+    # International redelivery
+    "redelivery_intl":             "Out for Delivery",
+    "redelivery_intl_confirmed":   "Out for Delivery",
 }
 def advance_shipment_stage(shipment, target_stage_key=None):
     """

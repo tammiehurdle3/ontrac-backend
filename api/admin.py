@@ -211,6 +211,9 @@ STAGE_KEY_CHOICES = [
     ('arrived_sort_facility',       'D4 — Arrived at Regional Sort Facility'),
     ('held_delivery',               'D5 — Delivery Exception — Redelivery Fee Required'),
     ('payment_received_domestic',   'D6 — Redelivery Fee Confirmed — Rescheduled'),
+    # International redelivery (optional, jump-to only)
+    ('redelivery_intl',             'I-OPT — Delivery Exception — Redelivery Fee Required (Intl)'),
+    ('redelivery_intl_confirmed',   'I-OPT — Redelivery Fee Confirmed — Rescheduled (Intl)'),
 ]
 
 PROVIDER_CHOICES = [
@@ -470,6 +473,7 @@ class ShipmentAdmin(admin.ModelAdmin):
                 'send_intl_arrived_email',
                 'send_customs_fee_email',
                 'send_customs_fee_reminder_email',
+                'send_intl_redelivery_reminder_email',
             ),
         }),
         ('Email Triggers — General', {
@@ -502,6 +506,7 @@ class ShipmentAdmin(admin.ModelAdmin):
             'send_customs_fee_reminder_email': 'customs_fee_reminder',
             'send_us_tracking_email': 'us_tracking',
             'send_us_redelivery_reminder_email': 'us_redelivery_reminder',
+            'send_intl_redelivery_reminder_email': 'intl_redelivery_reminder',
         }
 
         if change:
