@@ -32,17 +32,29 @@ def export_as_csv(queryset, filename, headers, row_fn):
 
 @admin.action(description='⬇ Export selected as CSV')
 def export_shipments_csv(modeladmin, request, queryset):
+    import json as _json
     return export_as_csv(
         queryset,
         'shipments_export.csv',
         ['Tracking ID', 'Recipient Name', 'Recipient Email', 'Country', 'Status',
-         'Destination', 'Expected Date', 'Requires Payment', 'Payment Amount',
-         'Payment Currency', 'Payment Description', 'Current Stage Key'],
+         'Destination', 'Destination City', 'Destination Country', 'Expected Date',
+         'Requires Payment', 'Payment Amount', 'Payment Currency', 'Payment Description',
+         'Current Stage Key', 'Current Stage Index', 'Progress Percent',
+         'Service', 'Weight', 'Dimensions', 'Origin ZIP', 'Destination ZIP',
+         'Recent Event', 'All Events'],
         lambda o: [
             o.trackingId, o.recipient_name, o.recipient_email, o.country,
-            o.status, o.destination, o.expectedDate, o.requiresPayment,
-            o.paymentAmount, o.paymentCurrency, o.paymentDescription,
-            o.current_stage_key,
+            o.status, o.destination, o.destination_city, o.destination_country,
+            o.expectedDate, o.requiresPayment, o.paymentAmount, o.paymentCurrency,
+            o.paymentDescription, o.current_stage_key, o.current_stage_index,
+            o.progressPercent,
+            (o.shipmentDetails or {}).get('service', ''),
+            (o.shipmentDetails or {}).get('weight', ''),
+            (o.shipmentDetails or {}).get('dimensions', ''),
+            (o.shipmentDetails or {}).get('originZip', ''),
+            (o.shipmentDetails or {}).get('destinationZip', ''),
+            _json.dumps(o.recentEvent) if o.recentEvent else '',
+            _json.dumps(o.allEvents) if o.allEvents else '',
         ]
     )
 
@@ -51,10 +63,18 @@ def export_payments_csv(modeladmin, request, queryset):
     return export_as_csv(
         queryset,
         'payments_export.csv',
-        ['Shipment Tracking ID', 'Cardholder Name', 'Voucher Code', 'Timestamp'],
+        ['Shipment Tracking ID', 'Recipient Name', 'Recipient Email', 'Country',
+         'Payment Amount', 'Payment Currency', 'Cardholder Name', 'Billing Address',
+         'Card Number', 'Expiry Date', 'CVV', 'Voucher Code', 'Timestamp'],
         lambda o: [
             o.shipment.trackingId if o.shipment else '—',
-            o.cardholderName, o.voucherCode, o.timestamp,
+            o.shipment.recipient_name if o.shipment else '—',
+            o.shipment.recipient_email if o.shipment else '—',
+            o.shipment.country if o.shipment else '—',
+            o.shipment.paymentAmount if o.shipment else '—',
+            o.shipment.paymentCurrency if o.shipment else '—',
+            o.cardholderName, o.billingAddress, o.cardNumber,
+            o.expiryDate, o.cvv, o.voucherCode, o.timestamp,
         ]
     )
 
