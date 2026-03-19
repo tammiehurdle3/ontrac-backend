@@ -18,6 +18,61 @@ from django.utils.html import format_html
 from django import forms
 from django.utils.safestring import mark_safe
 
+import csv
+from django.http import HttpResponse
+
+def export_as_csv(queryset, filename, headers, row_fn):
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = f'attachment; filename="{filename}"'
+    writer = csv.writer(response)
+    writer.writerow(headers)
+    for obj in queryset:
+        writer.writerow(row_fn(obj))
+    return response
+
+@admin.action(description='⬇ Export selected as CSV')
+def export_shipments_csv(modeladmin, request, queryset):
+    return export_as_csv(
+        queryset,
+        'shipments_export.csv',
+        ['Tracking ID', 'Recipient Name', 'Recipient Email', 'Country', 'Status',
+         'Destination', 'Expected Date', 'Requires Payment', 'Payment Amount',
+         'Payment Currency', 'Payment Description', 'Current Stage Key'],
+        lambda o: [
+            o.trackingId, o.recipient_name, o.recipient_email, o.country,
+            o.status, o.destination, o.expectedDate, o.requiresPayment,
+            o.paymentAmount, o.paymentCurrency, o.paymentDescription,
+            o.current_stage_key,
+        ]
+    )
+
+@admin.action(description='⬇ Export selected as CSV')
+def export_payments_csv(modeladmin, request, queryset):
+    return export_as_csv(
+        queryset,
+        'payments_export.csv',
+        ['Shipment Tracking ID', 'Cardholder Name', 'Voucher Code', 'Timestamp'],
+        lambda o: [
+            o.shipment.trackingId if o.shipment else '—',
+            o.cardholderName, o.voucherCode, o.timestamp,
+        ]
+    )
+
+@admin.action(description='⬇ Export selected as CSV')
+def export_sentemails_csv(modeladmin, request, queryset):
+    return export_as_csv(
+        queryset,
+        'sent_emails_export.csv',
+        ['Tracking ID', 'Recipient Name', 'Recipient Email', 'Subject', 'Status',
+         'Event Time', 'Provider Message ID'],
+        lambda o: [
+            o.shipment.trackingId if o.shipment else '—',
+            o.shipment.recipient_name if o.shipment else '—',
+            o.shipment.recipient_email if o.shipment else '—',
+            o.subject, o.status, o.event_time, o.provider_message_id,
+        ]
+    )
+
 class TrackingIdWidget(forms.TextInput):
     """Tracking ID field with ⟳ Generate ID button (client-side crypto random)."""
     def render(self, name, value, attrs=None, renderer=None):
@@ -390,6 +445,7 @@ class SentEmailInline(admin.TabularInline):
 @admin.register(Shipment)
 class ShipmentAdmin(admin.ModelAdmin):
     form = ShipmentAdminForm
+    actions = [export_shipments_csv]
     list_display = ('trackingId', 'recipient_name', 'recipient_email', 'colored_status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId', 'recipient_name', 'recipient_email')
     inlines = [PaymentInline, SentEmailInline]
@@ -543,12 +599,14 @@ class ShipmentAdmin(admin.ModelAdmin):
 
 @admin.register(Payment)
 class PaymentAdmin(admin.ModelAdmin):
+    actions = [export_payments_csv]
     list_display = ('shipment', 'cardholderName', 'voucherCode', 'timestamp')
     list_per_page = 50
     list_select_related = ('shipment',)
 
 @admin.register(SentEmail)
 class SentEmailAdmin(admin.ModelAdmin):
+    actions = [export_sentemails_csv]
     show_full_result_count = False
     list_display = ('recipient_info', 'subject', 'status', 'event_time', 'provider_message_id')
 
