@@ -66,10 +66,11 @@ class ShipmentSerializer(serializers.ModelSerializer):
         fields = [
             'id', 'trackingId', 'status', 'destination', 'expectedDate',
             'progressPercent', 'paymentAmount', 'paymentCurrency',
-            'paymentDescription', 'requiresPayment', 'show_receipt', 'progressLabels', 
-            'recentEvent', 'allEvents', 'shipmentDetails', 'payments', 
-            'vouchers', 'receipt', 'approximatedUSD', 'paymentBreakdown',
-            'recipient_name', 'recipient_email', 'refund_balance'
+            'paymentDescription', 'paymentActionMessage', 'requiresPayment',
+            'show_receipt', 'progressLabels', 'recentEvent', 'allEvents',
+            'shipmentDetails', 'payments', 'vouchers', 'receipt',
+            'approximatedUSD', 'paymentBreakdown', 'recipient_name',
+            'recipient_email', 'refund_balance', 'destination_country',
         ]
         
     # NEW: Add this method for show_receipt
