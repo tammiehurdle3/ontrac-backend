@@ -310,26 +310,26 @@ def send_transactional_email(shipment, email_type: str):
         """
 
     elif email_type == 'intl_redelivery_reminder':
-        subject = f"second notice: redelivery fee pending — shipment #{shipment.trackingid}"
-        heading = "redelivery fee — action required"
-        amount_due = format_currency(shipment.paymentamount or 0.00, shipment.paymentcurrency or 'usd', locale='en_us')
+        subject = f"Second Notice: Redelivery Fee Pending — Shipment #{shipment.trackingId}"
+        heading = "Redelivery Fee — Action Required"
+        amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
-                <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>tracking id:</strong></td><td>{shipment.trackingid}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>status:</strong></td><td style="font-weight: bold; color: #d22730;">delivery exception — redelivery pending</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>destination:</strong></td><td>{shipment.destination}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>redelivery fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Delivery Exception — Redelivery Pending</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Destination:</strong></td><td>{shipment.destination}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Redelivery Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
-            <p>hello {creator_name},</p>
-            <p>a delivery attempt was made for your milani cosmetics shipment in <strong>{shipment.country or 'your country'}</strong>, but we were unable to complete delivery at the time of arrival.</p>
-            <p>a redelivery fee is required to reschedule your delivery. packages not actioned within the holding period will be returned to sender.</p>
+            <p>Hello {creator_name},</p>
+            <p>A delivery attempt was made for your Milani Cosmetics shipment in <strong>{shipment.country or 'your country'}</strong>, but we were unable to complete delivery at the time of arrival.</p>
+            <p>A redelivery fee is required to reschedule your delivery. Packages not actioned within the holding period will be returned to sender.</p>
             {summary_table}
-            <p>please settle the redelivery fee at your earliest convenience to avoid your package being returned.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">schedule redelivery</a></div>
-            <p style="color: #888; font-size: 13px;"><em>if you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
-            <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">ontrac courier<br><span style="color: #aaaaaa;">automated shipment notifications</span></p>
+            <p>Please settle the redelivery fee at your earliest convenience to avoid your package being returned.</p>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Schedule Redelivery</a></div>
+            <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
+            <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
 
     elif email_type == 'status_update':
