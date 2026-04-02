@@ -241,7 +241,8 @@ def send_transactional_email(shipment, email_type: str):
             <p>An import fee has been assessed by customs, which needs to be cleared before your package can continue its journey to you.</p>
             {summary_table}
             <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Complete Payment</a></div>
-            <p style="font-size: 14px; color: #555555; margin: 20px 0 0 0; line-height: 1.6;">Upon payment confirmation, your shipment will be immediately released and dispatched to the local carrier for final delivery. Our support team is available 24/7 via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a>.</p>
+            <p style="font-size: 14px; color: #555555; margin: 20px 0 0 0; line-height: 1.6;">Upon payment confirmation, your shipment will be immediately released and dispatched to the local carrier for final delivery.</p>
+            <p style="font-size: 13px; color: #777777; margin: 16px 0 0 0; line-height: 1.6;">For any questions, our support team is available 24/7 — reach us via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a> or by email at <a href="mailto:support@ontracourier.us" style="color: #0092ff; text-decoration: none;">support@ontracourier.us</a>.</p>
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
     elif email_type == 'customs_fee_reminder':
@@ -281,14 +282,15 @@ def send_transactional_email(shipment, email_type: str):
         main_body = f"""
             <p>hello {creator_name},</p>
             <p style="color: #d22730; font-weight: bold;">this is a final notice regarding your milani cosmetics shipment currently held at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
-            <p>despite previous notifications, the import fee for your shipment remains unpaid. under customs regulations, packages that remain unclaimed beyond the permitted holding period are subject to <strong>mandatory return to sender or disposal</strong>.</p>
+            <p>despite previous notifications, the outstanding import fee remains unpaid. under applicable customs regulations, shipments that exceed the maximum permitted holding period are subject to <strong>mandatory return to sender or administrative disposal</strong>.</p>
             <p><strong>you have approximately 48 hours to complete payment before this process is initiated.</strong></p>
             {summary_table}
-            <p>if you wish to receive your shipment, you must complete the import fee payment immediately using the button below.</p>
+            <p>to prevent the return of your shipment, please complete the import fee payment immediately using the button below.</p>
             <div style="text-align: center; margin: 30px 0;">
                 <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block; white-space: nowrap;">pay now — avoid return</a>
             </div>
-            <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; margin-top: 24px;"><em>if you have already completed payment within the last 24 hours, please disregard this notice and allow time for processing.</em></p>
+            <p style="font-size: 13px; color: #777777; margin: 16px 0 0 0; line-height: 1.6;">for urgent assistance, contact our support team via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a> or at <a href="mailto:support@ontracourier.us" style="color: #0092ff; text-decoration: none;">support@ontracourier.us</a>.</p>
+            <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; margin-top: 24px;"><em>if you have already completed payment within the last 24 hours, please disregard this notice and allow processing time.</em></p>
             <p style="font-size: 13px; color: #888888;">ontrac courier<br><span style="color: #aaaaaa;">automated shipment notifications</span></p>
         """
 
@@ -473,7 +475,7 @@ def send_manual_custom_email(shipment, subject, heading, message_body, include_t
         """
 
     formatted_body = message_body.replace('\n', '<br>')
-    combined_content = f"{formatted_body}{tracking_box_html}{payment_button_html}"
+    combined_content = f"{tracking_box_html}{formatted_body}{payment_button_html}"
 
     format_params = {
         "subject": subject,
