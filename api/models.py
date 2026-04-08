@@ -24,6 +24,7 @@ class Shipment(models.Model):
     send_customs_fee_email = models.BooleanField(default=False, help_text="Check this box to send the customs fee email.")
     send_status_update_email = models.BooleanField(default=False, help_text="Check this box to send a general status update email.")
     send_customs_fee_reminder_email = models.BooleanField(default=False)
+    send_customs_fee_final_email = models.BooleanField(default=False, help_text="Final notice — package will be returned in 72 hours if unpaid.")
     send_us_tracking_email = models.BooleanField(default=False, help_text="Send domestic tracking notification — package is on its way.")
     send_us_redelivery_reminder_email = models.BooleanField(default=False, help_text="Send redelivery fee reminder for domestic shipments.")
     send_intl_redelivery_reminder_email = models.BooleanField(default=False, help_text="Send redelivery fee reminder for international shipments.")
@@ -49,6 +50,7 @@ class Shipment(models.Model):
     paymentCurrency = models.CharField(max_length=3, default='USD', help_text="The currency for the payment amount (e.g., USD, GBP, EUR).")
     paymentDescription = models.CharField(max_length=100, default='Import Duties', blank=True, help_text="What is this payment for? (e.g., Import Duties, Redelivery Fee) — shows next to the amount.")
     paymentActionMessage = models.CharField(max_length=500, blank=True, default='', help_text="Custom message for the ⚠ Action Required bar on the tracking page. Leave blank for smart default.")
+    delivery_image_url = models.URLField(max_length=500, blank=True, default='', help_text="URL of generated proof of delivery image.")
     allowed_payment_providers = models.JSONField(
         default=list, blank=True,
         help_text="Leave empty for automatic ShieldClimb provider selection. Check specific providers in admin to override."

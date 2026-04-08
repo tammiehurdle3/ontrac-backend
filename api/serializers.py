@@ -71,6 +71,7 @@ class ShipmentSerializer(serializers.ModelSerializer):
             'shipmentDetails', 'payments', 'vouchers', 'receipt',
             'approximatedUSD', 'paymentBreakdown', 'recipient_name',
             'recipient_email', 'refund_balance', 'destination_country',
+            'delivery_image_url',
         ]
         
     # NEW: Add this method for show_receipt

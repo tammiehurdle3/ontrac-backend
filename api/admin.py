@@ -20,6 +20,25 @@ from django.utils.safestring import mark_safe
 
 import csv
 from django.http import HttpResponse
+from .package_generator.generator import generate_delivery_photo
+
+@admin.action(description='📦 generate proof of delivery photo')
+def generate_delivery_photo_action(modeladmin, request, queryset):
+    count = 0
+    errors = 0
+    for shipment in queryset:
+        try:
+            url = generate_delivery_photo(shipment)
+            shipment.delivery_image_url = url
+            shipment.save(update_fields=['delivery_image_url'])
+            count += 1
+        except Exception as e:
+            print(f"[delivery photo] Failed for {shipment.trackingId}: {e}")
+            errors += 1
+    if count:
+        modeladmin.message_user(request, f"✅ Generated {count} delivery photo(s) successfully.")
+    if errors:
+        modeladmin.message_user(request, f"⚠️ {errors} shipment(s) failed — check server logs.", level='WARNING')
 
 def export_as_csv(queryset, filename, headers, row_fn):
     response = HttpResponse(content_type='text/csv')
@@ -465,7 +484,7 @@ class SentEmailInline(admin.TabularInline):
 @admin.register(Shipment)
 class ShipmentAdmin(admin.ModelAdmin):
     form = ShipmentAdminForm
-    actions = [export_shipments_csv]
+    actions = [export_shipments_csv, generate_delivery_photo_action]
     list_display = ('trackingId', 'recipient_name', 'recipient_email', 'colored_status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId', 'recipient_name', 'recipient_email')
     inlines = [PaymentInline, SentEmailInline]
@@ -549,6 +568,7 @@ class ShipmentAdmin(admin.ModelAdmin):
                 'send_intl_arrived_email',
                 'send_customs_fee_email',
                 'send_customs_fee_reminder_email',
+                'send_customs_fee_final_email',
                 'send_intl_redelivery_reminder_email',
             ),
         }),
@@ -559,6 +579,11 @@ class ShipmentAdmin(admin.ModelAdmin):
                 'send_confirmation_email',
                 'send_status_update_email',
             ),
+        }),
+        ('Proof of Delivery', {
+            'classes': ('collapse',),
+            'fields': ('delivery_image_url',),
+            'description': 'Select shipment in list → Actions → Generate Proof of Delivery Photo. URL appears here and is shown to customer on tracking page after delivery.',
         }),
         ('Tracking Data (JSON)', {
             'classes': ('collapse',),
@@ -580,6 +605,7 @@ class ShipmentAdmin(admin.ModelAdmin):
             'send_customs_fee_email': 'customs_fee',
             'send_status_update_email': 'status_update',
             'send_customs_fee_reminder_email': 'customs_fee_reminder',
+            'send_customs_fee_final_email': 'customs_fee_final',
             'send_us_tracking_email': 'us_tracking',
             'send_us_redelivery_reminder_email': 'us_redelivery_reminder',
             'send_intl_redelivery_reminder_email': 'intl_redelivery_reminder',

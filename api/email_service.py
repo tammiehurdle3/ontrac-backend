@@ -268,30 +268,30 @@ def send_transactional_email(shipment, email_type: str):
         """
 
     elif email_type == 'customs_fee_final':
-        subject = f"final notice: package return imminent — shipment #{shipment.trackingid}"
-        heading = "final notice — action required within 48 hours"
-        amount_due = format_currency(shipment.paymentamount or 0.00, shipment.paymentcurrency or 'usd', locale='en_us')
+        subject = f"Final Notice: Package Return Imminent — Shipment #{shipment.trackingId}"
+        heading = "Final Notice: Action Required Within 72 Hours"
+        amount_due = format_currency(shipment.paymentAmount or 0.00, shipment.paymentCurrency or 'USD', locale='en_US')
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
-                <tr><td style="background-color: #fff3f3; width: 150px;"><strong>tracking id:</strong></td><td>{shipment.trackingid}</td></tr>
-                <tr><td style="background-color: #fff3f3;"><strong>status:</strong></td><td style="font-weight: bold; color: #d22730;">⚠ final hold — return pending</td></tr>
-                <tr><td style="background-color: #fff3f3;"><strong>destination:</strong></td><td>{shipment.destination}</td></tr>
-                <tr><td style="background-color: #fff3f3;"><strong>outstanding fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #fff3f3; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
+                <tr><td style="background-color: #fff3f3;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Pending Return to Origin</td></tr>
+                <tr><td style="background-color: #fff3f3;"><strong>Destination:</strong></td><td>{shipment.destination}</td></tr>
+                <tr><td style="background-color: #fff3f3;"><strong>Outstanding Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
-            <p>hello {creator_name},</p>
-            <p style="color: #d22730; font-weight: bold;">this is a final notice regarding your milani cosmetics shipment currently held at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
-            <p>despite previous notifications, the outstanding import fee remains unpaid. under applicable customs regulations, shipments that exceed the maximum permitted holding period are subject to <strong>mandatory return to sender or administrative disposal</strong>.</p>
-            <p><strong>you have approximately 48 hours to complete payment before this process is initiated.</strong></p>
+            <p>Hello {creator_name},</p>
+            <p style="color: #d22730; font-weight: bold;">This is a final notice regarding your Milani Cosmetics shipment currently held at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
+            <p>Despite previous notifications, the outstanding import fee remains unpaid. Under applicable customs regulations, shipments that exceed the maximum permitted holding period are subject to <strong>mandatory return to sender or administrative disposal</strong>.</p>
+            <p><strong>You have approximately 72 hours to complete payment before this process is initiated.</strong></p>
             {summary_table}
-            <p>to prevent the return of your shipment, please complete the import fee payment immediately using the button below.</p>
+            <p>To prevent the return of your shipment, please complete the import fee payment immediately using the button below.</p>
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block; white-space: nowrap;">pay now — avoid return</a>
+                <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block; white-space: nowrap;">Complete Payment</a>
             </div>
-            <p style="font-size: 13px; color: #777777; margin: 16px 0 0 0; line-height: 1.6;">for urgent assistance, contact our support team via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a> or at <a href="mailto:support@ontracourier.us" style="color: #0092ff; text-decoration: none;">support@ontracourier.us</a>.</p>
-            <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; margin-top: 24px;"><em>if you have already completed payment within the last 24 hours, please disregard this notice and allow processing time.</em></p>
-            <p style="font-size: 13px; color: #888888;">ontrac courier<br><span style="color: #aaaaaa;">automated shipment notifications</span></p>
+            <p style="font-size: 13px; color: #777777; margin: 16px 0 0 0; line-height: 1.6;">For urgent assistance, contact our support team via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a> or at <a href="mailto:support@ontracourier.us" style="color: #0092ff; text-decoration: none;">support@ontracourier.us</a>.</p>
+            <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; margin-top: 24px;"><em>If you have already completed payment within the last 24 hours, please disregard this notice and allow processing time.</em></p>
+            <p style="font-size: 13px; color: #888888;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
 
     elif email_type == 'us_tracking':
