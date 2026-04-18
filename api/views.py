@@ -51,6 +51,16 @@ class ShipmentViewSet(viewsets.ModelViewSet):
     serializer_class = ShipmentSerializer
     lookup_field = 'trackingId'
 
+    def get_permissions(self):
+        if self.action == 'list':
+            permission_classes = [IsAdminUser]
+        elif self.action == 'retrieve':
+            permission_classes = [AllowAny]
+        else:
+            permission_classes = [IsAdminUser]
+            
+        return [permission() for permission in permission_classes]
+
 class PaymentCreateView(generics.CreateAPIView):
     queryset = Payment.objects.all()
     serializer_class = PaymentSerializer
