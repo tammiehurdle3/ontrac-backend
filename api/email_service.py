@@ -360,6 +360,46 @@ def send_transactional_email(shipment, email_type: str):
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
 
+    elif email_type == 'intl_first_notification':
+        subject = f"Your Milani Cosmetics Shipment is En Route"
+        heading = "Your Shipment is on Its Way"
+        summary_table = f"""
+            <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
+                <tr><td style="background-color: #f7f7f7; width: 160px;"><strong>Tracking Number:</strong></td><td style="font-family: 'Courier New', monospace; font-weight: bold; font-size: 15px;">{shipment.trackingId}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Service:</strong></td><td>International Priority</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Destination:</strong></td><td>{shipment.destination or shipment.country or 'Your address'}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Estimated Delivery:</strong></td><td>{shipment.expectedDate or 'Pending'}</td></tr>
+            </table>
+        """
+        main_body = f"""
+            <p>Hello {creator_name},</p>
+            <p>Your Milani Cosmetics package has been accepted by OnTrac Courier and is now in active transit. You can track every checkpoint in real time using the button below.</p>
+            {summary_table}
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 13px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Track Your Shipment</a></div>
+            <p style="font-size: 13px; color: #888888;">This is an automated notification from OnTrac Courier, the official carrier for Milani Cosmetics. You will receive further updates as your shipment progresses through our network.</p>
+            <p style="margin-top: 24px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
+        """
+
+    elif email_type == 'us_first_notification':
+        subject = f"Your Milani Cosmetics Shipment is En Route"
+        heading = "Your Shipment is on Its Way"
+        summary_table = f"""
+            <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
+                <tr><td style="background-color: #f7f7f7; width: 160px;"><strong>Tracking Number:</strong></td><td style="font-family: 'Courier New', monospace; font-weight: bold; font-size: 15px;">{shipment.trackingId}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Service:</strong></td><td>Ground — Domestic</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Destination:</strong></td><td>{shipment.destination or 'Your address'}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Estimated Delivery:</strong></td><td>{shipment.expectedDate or 'Pending'}</td></tr>
+            </table>
+        """
+        main_body = f"""
+            <p>Hello {creator_name},</p>
+            <p>Your Milani Cosmetics package has been accepted by OnTrac Courier and is now in transit to your address. Use the button below to follow it in real time.</p>
+            {summary_table}
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 13px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Track Your Shipment</a></div>
+            <p style="font-size: 13px; color: #888888;">This is an automated notification from OnTrac Courier, the official carrier for Milani Cosmetics.</p>
+            <p style="margin-top: 24px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
+        """
+
     elif email_type == 'status_update':
         html_template = STATUS_UPDATE_HTML
         subject = f"Shipment Update: {shipment.status} — Tracking #{shipment.trackingId}"

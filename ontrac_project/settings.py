@@ -170,6 +170,23 @@ RESEND_API_KEY = env('RESEND_API_KEY', default='')
 #MILANI INITIAL OUTREACH
 SENDGRID_API_KEY = env('SENDGRID_API_KEY', default='')
 SENDGRID_TRANSACTIONAL_API_KEY = env('SENDGRID_TRANSACTIONAL_API_KEY', default='')
+RESEND_MILANI_API_KEY = env('RESEND_MILANI_API_KEY', default=None)
+MILANI_SENDER_NAME = env('MILANI_SENDER_NAME', default='Diana Higuera')
+MILANI_SENDER_EMAIL = env('MILANI_SENDER_EMAIL', default='diana@milanicollabs.com')
+
+MILANI_SMTP_HOST = 'smtp.gmail.com'
+MILANI_SMTP_PORT = 587
+MILANI_SMTP_USE_TLS = True
+MILANI_SMTP_USER = env('MILANI_SMTP_USER', default='diana@milanicollabs.com')
+MILANI_SMTP_PASSWORD = env('MILANI_SMTP_PASSWORD', default='')
+
+# --- IONOS — diana@milani-cosmetics.com ---
+# Password: IONOS account password directly (no app password needed)
+MILANI_IONOS_SMTP_HOST = 'smtp.ionos.com'
+MILANI_IONOS_SMTP_PORT = 587
+MILANI_IONOS_SMTP_USE_TLS = True
+MILANI_IONOS_SMTP_USER = env('MILANI_IONOS_SMTP_USER', default='diana@milani-cosmetics.com')
+MILANI_IONOS_SMTP_PASSWORD = env('MILANI_IONOS_SMTP_PASSWORD', default='')
 
 # --- DJANGO CACHE CONFIGURATION ---
 # This tells Django to use your Render Redis as its cache

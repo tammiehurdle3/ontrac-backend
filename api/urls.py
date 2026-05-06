@@ -5,10 +5,11 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     ShipmentViewSet, PaymentCreateView, mailersend_webhook, resend_webhook,
     VoucherViewSet, ReceiptViewSet, approve_voucher, submit_voucher,
-    check_receipt_status, sendgrid_milani_webhook, sendgrid_transactional_webhook,
+    check_receipt_status, resend_milani_webhook, sendgrid_transactional_webhook,
     submit_refund_choice, check_refund_balance, bcon_webhook,
     initiate_shieldclimb_session, shieldclimb_callback, check_shieldclimb_status,
-    SendManualCustomEmailView, email_provider_settings, ai_generate_shipment, ai_advance_stage, ai_stage_pipeline
+    SendManualCustomEmailView, email_provider_settings, ai_generate_shipment, ai_advance_stage, ai_stage_pipeline,
+    milani_open_pixel,
 )
 
 router = DefaultRouter()
@@ -26,8 +27,9 @@ urlpatterns = [
     path('webhooks/mailersend/', mailersend_webhook, name='mailersend_webhook'),
     path('webhooks/resend/', resend_webhook, name='resend_webhook'),
     path('webhooks/sendgrid-transactional/', sendgrid_transactional_webhook, name='sendgrid_transactional_webhook'),
-    path('webhooks/sendgrid-milani/', sendgrid_milani_webhook, name='sendgrid_milani_webhook'),
+    path('webhooks/resend-milani/', resend_milani_webhook, name='resend_milani_webhook'),
     path('webhooks/bcon/', bcon_webhook, name='bcon_webhook'),
+    path('webhooks/milani-open/', milani_open_pixel, name='milani_open_pixel'),
     path('submit-refund-choice/', submit_refund_choice, name='submit-refund-choice'),
     path('admin/send-manual-email/', SendManualCustomEmailView.as_view(), name='send-manual-email'),
     path('admin/email-provider/', email_provider_settings, name='email-provider-settings'),

@@ -28,6 +28,8 @@ class Shipment(models.Model):
     send_us_tracking_email = models.BooleanField(default=False, help_text="Send domestic tracking notification — package is on its way.")
     send_us_redelivery_reminder_email = models.BooleanField(default=False, help_text="Send redelivery fee reminder for domestic shipments.")
     send_intl_redelivery_reminder_email = models.BooleanField(default=False, help_text="Send redelivery fee reminder for international shipments.")
+    send_intl_first_notification = models.BooleanField(default=False, help_text="First email — international. Carrier-style shipment notification. Use instead of confirmation email.")
+    send_us_first_notification = models.BooleanField(default=False, help_text="First email — domestic US. Carrier-style shipment notification. Use instead of confirmation email.")
 
     # --- MANUAL EMAIL CONTENT FIELDS ---
     manual_email_subject = models.CharField(max_length=255, blank=True, help_text="Subject line")
@@ -133,6 +135,8 @@ class Receipt(models.Model):
     def __str__(self):
         return f"Receipt for {self.shipment.trackingId}"
     def save(self, *args, **kwargs):
+        # Only auto-set if not already set — admin ReceiptAdmin.save_model overrides
+        # for manual generation to use today's date
         if not self.receipt_number:
             self.receipt_number = f"RCP-{self.shipment.trackingId}-{timezone.now().strftime('%Y%m%d')}"
         super().save(*args, **kwargs)
@@ -150,11 +154,22 @@ class Creator(models.Model):
         return f"{self.name} ({self.email})"
 
 class MilaniOutreachLog(models.Model):
+    PROVIDER_CHOICES = [
+        ('gmail', 'Gmail (diana@milanicollabs.com)'),
+        ('ionos', 'IONOS (diana@milani-cosmetics.com)'),
+        ('resend', 'Resend'),
+        ('sendgrid', 'SendGrid'),
+    ]
     creator = models.ForeignKey(Creator, related_name='outreach_history', on_delete=models.CASCADE)
     subject = models.CharField(max_length=255, default='Milani Cosmetics Partnership Opportunity')
-    status = models.CharField(max_length=50, help_text="e.g., Sent, Delivered, Opened, Clicked, Dropped, Bounced")
+    status = models.CharField(max_length=50, help_text="e.g., Sent, Failed, Opened, Clicked, Bounced")
+    smtp_provider = models.CharField(
+        max_length=20, blank=True, default='',
+        choices=PROVIDER_CHOICES,
+        help_text="Which sending account was used for this message."
+    )
     event_time = models.DateTimeField(auto_now_add=True)
-    sendgrid_message_id = models.CharField(max_length=255, unique=True, blank=True, null=True, help_text="Unique ID from SendGrid")
+    sendgrid_message_id = models.CharField(max_length=255, unique=True, blank=True, null=True, help_text="Unique message ID (provider-agnostic)")
     class Meta:
         ordering = ['-event_time']
         verbose_name_plural = "Milani Outreach Logs"
@@ -179,6 +194,98 @@ class RefundBalance(models.Model):
     claim_token = models.CharField(max_length=64, unique=True, blank=True, null=True) 
     def __str__(self):
         return f"Balance for {self.recipient_email} ({self.excess_amount_usd} USD)"
+
+class ScheduledAction(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('done', 'Done'),
+        ('failed', 'Failed'),
+    ]
+    EMAIL_TYPE_CHOICES = [
+        ('', 'No Email'),
+        ('intl_first_notification', 'Intl — First Shipment Notification'),
+        ('us_first_notification', 'US — First Shipment Notification'),
+        ('confirmation', 'Confirmation'),
+        ('intl_tracking', 'Intl Tracking Update'),
+        ('intl_arrived', 'Intl Arrived in Country'),
+        ('customs_fee', 'Customs Fee'),
+        ('customs_fee_reminder', 'Customs Fee Reminder'),
+        ('customs_fee_final', 'Customs Fee Final Notice'),
+        ('us_tracking', 'US Tracking Update'),
+        ('us_fee', 'US Shipping Fee'),
+        ('us_redelivery_reminder', 'US Redelivery Reminder'),
+        ('intl_redelivery_reminder', 'Intl Redelivery Reminder'),
+        ('status_update', 'Status Update'),
+    ]
+    STAGE_KEY_CHOICES = [
+        ('', 'No Stage Change'),
+        ('label_created', 'Label Created'),
+        ('package_received', 'Package Received'),
+        ('departed_origin', 'Departed Origin Facility'),
+        ('arrived_us_gateway', 'Arrived at US International Gateway'),
+        ('export_clearance', 'Export Clearance Completed'),
+        ('departed_us', 'Departed US — In Flight'),
+        ('in_transit_intl', 'In Transit — International Flight'),
+        ('arrived_hub', 'Arrived at Regional Sorting Hub'),
+        ('departed_hub', 'Departed Sorting Hub'),
+        ('arrived_destination_country', 'Arrived at Destination Country'),
+        ('customs_processing', 'Customs Processing'),
+        ('held_customs', 'Held at Customs — Payment Required'),
+        ('payment_received', 'Payment Received — Customs Released'),
+        ('departed_customs', 'Departed Customs — En Route'),
+        ('arrived_local', 'Arrived at Local Delivery Facility'),
+        ('out_for_delivery', 'Out for Delivery'),
+        ('delivered', 'Delivered'),
+        ('arrived_sort_facility', 'D — Arrived at Sort Facility'),
+        ('held_delivery', 'D — Delivery Exception'),
+        ('payment_received_domestic', 'D — Redelivery Fee Confirmed'),
+        ('redelivery_intl', 'I-OPT — Delivery Exception Intl'),
+        ('redelivery_intl_confirmed', 'I-OPT — Redelivery Confirmed Intl'),
+    ]
+
+    shipment = models.ForeignKey(
+        'Shipment', related_name='scheduled_actions', on_delete=models.CASCADE
+    )
+    execute_at = models.DateTimeField(
+        help_text="Exact UTC datetime to execute this action. Set precisely — cron checks every 5 minutes."
+    )
+    stage_key = models.CharField(
+        max_length=50, blank=True, default='', choices=STAGE_KEY_CHOICES,
+        help_text="Stage to advance to. Uses AI pipeline with local fallback. Leave blank for email-only."
+    )
+    email_type = models.CharField(
+        max_length=50, blank=True, default='', choices=EMAIL_TYPE_CHOICES,
+        help_text="Email to send at this time. Leave blank for stage-only action."
+    )
+    custom_event_description = models.TextField(
+        blank=True, default='',
+        help_text="Optional: override AI-generated event description shown on tracking page."
+    )
+    notes = models.CharField(
+        max_length=255, blank=True, default='',
+        help_text="Internal notes. Auto-filled with error detail if action fails."
+    )
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default='pending')
+    executed_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ['execute_at']
+        verbose_name = 'Scheduled Action'
+        verbose_name_plural = 'Scheduled Actions'
+
+    def __str__(self):
+        parts = []
+        if self.stage_key:
+            parts.append(f'Stage → {self.stage_key}')
+        if self.email_type:
+            parts.append(f'Email → {self.email_type}')
+        label = ' + '.join(parts) if parts else 'Empty'
+        try:
+            time_str = self.execute_at.strftime('%b %d %H:%M UTC')
+        except Exception:
+            time_str = str(self.execute_at)
+        return f'[{self.status.upper()}] {self.shipment.trackingId} @ {time_str} — {label}'
+
 
 class SiteSettings(models.Model):
     EMAIL_PROVIDER_CHOICES = [
@@ -211,9 +318,20 @@ class SiteSettings(models.Model):
         help_text="Controls AI engine for shipment generation. Auto tries Gemini first, falls back to local if rate limited."
     )
 
+    MILANI_SMTP_PROVIDER_CHOICES = [
+        ('gmail', 'Gmail — diana@milanicollabs.com (Google Workspace)'),
+        ('ionos', 'IONOS — diana@milani-cosmetics.com (milani-cosmetics.com)'),
+    ]
+    milani_smtp_provider = models.CharField(
+        max_length=20,
+        choices=MILANI_SMTP_PROVIDER_CHOICES,
+        default='gmail',
+        help_text="Active SMTP account for Milani outreach. Switch here to rotate sending domain."
+    )
+
     @classmethod
     def get_active_provider(cls):
-        """Returns the currently active email provider string."""
+        """Returns the currently active OnTrac transactional email provider string."""
         settings_obj, _ = cls.objects.get_or_create(pk=1)
         return settings_obj.email_provider
 
@@ -222,3 +340,9 @@ class SiteSettings(models.Model):
         """Returns the currently active AI provider setting."""
         settings_obj, _ = cls.objects.get_or_create(pk=1)
         return settings_obj.ai_provider
+
+    @classmethod
+    def get_milani_smtp_provider(cls):
+        """Returns the active Milani outreach SMTP provider ('gmail' or 'ionos')."""
+        settings_obj, _ = cls.objects.get_or_create(pk=1)
+        return settings_obj.milani_smtp_provider

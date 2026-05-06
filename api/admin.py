@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction
 from django.conf import settings
 import pusher
 from decimal import Decimal
@@ -21,6 +21,81 @@ from django.utils.safestring import mark_safe
 import csv
 from django.http import HttpResponse
 from .package_generator.generator import generate_delivery_photo
+
+
+class ShipmentChoiceField(forms.ModelChoiceField):
+    """Shows tracking ID + name + email in all shipment dropdowns. Latest first."""
+    def label_from_instance(self, obj):
+        name = obj.recipient_name or '—'
+        email = obj.recipient_email or '—'
+        return f"{obj.trackingId}  ·  {name}  ({email})"
+
+
+class ScheduledActionInlineForm(forms.ModelForm):
+    # Must explicitly define as DateTimeField — Django auto-generates SplitDateTimeField
+    # from model which expects [date, time] list. This fixes "Enter a list of values."
+    execute_at = forms.DateTimeField(
+        widget=forms.DateTimeInput(
+            attrs={'type': 'datetime-local', 'style': 'width:220px'},
+            format='%Y-%m-%dT%H:%M',
+        ),
+        input_formats=['%Y-%m-%dT%H:%M', '%Y-%m-%d %H:%M:%S', '%Y-%m-%d %H:%M'],
+        help_text="UTC time. Cron runs every 5 min so actions fire within 5 min of set time.",
+    )
+    stage_key = forms.ChoiceField(
+        choices=ScheduledAction.STAGE_KEY_CHOICES,
+        required=False,
+        label='Stage to Advance To',
+        help_text="Uses AI pipeline with local fallback. Leave blank for email-only.",
+    )
+    email_type = forms.ChoiceField(
+        choices=ScheduledAction.EMAIL_TYPE_CHOICES,
+        required=False,
+        label='Email to Send',
+        help_text="Leave blank for stage-only action.",
+    )
+
+    class Meta:
+        model = ScheduledAction
+        fields = '__all__'
+        widgets = {
+            'custom_event_description': forms.Textarea(attrs={'rows': 2, 'style': 'width:100%'}),
+            'notes': forms.TextInput(attrs={'style': 'width:100%', 'readonly': 'readonly'}),
+        }
+
+
+class ScheduledActionStandaloneForm(ScheduledActionInlineForm):
+    """Standalone admin form — shows rich shipment label sorted latest first."""
+    shipment = ShipmentChoiceField(
+        queryset=Shipment.objects.all().order_by('-id'),
+        help_text="Select shipment — sorted most recent first. Shows Tracking ID · Name (Email)."
+    )
+
+
+class ScheduledActionInline(admin.TabularInline):
+    model = ScheduledAction
+    form = ScheduledActionInlineForm
+    extra = 1
+    fields = ('execute_at', 'stage_key', 'email_type', 'custom_event_description', 'status', 'executed_at', 'notes')
+    readonly_fields = ('status', 'executed_at', 'notes')
+    ordering = ('execute_at',)
+    verbose_name = 'Scheduled Action'
+    verbose_name_plural = 'Scheduled Actions — Timeline'
+    classes = ['collapse']
+
+    def has_delete_permission(self, request, obj=None):
+        return True
+
+
+class ReceiptAdminForm(forms.ModelForm):
+    shipment = ShipmentChoiceField(
+        queryset=Shipment.objects.all().order_by('-id'),
+        help_text="Select shipment — sorted most recent first. Receipt number auto-generates on save using today's date."
+    )
+
+    class Meta:
+        model = Receipt
+        fields = '__all__'
 
 @admin.action(description='📦 generate proof of delivery photo')
 def generate_delivery_photo_action(modeladmin, request, queryset):
@@ -487,7 +562,7 @@ class ShipmentAdmin(admin.ModelAdmin):
     actions = [export_shipments_csv, generate_delivery_photo_action]
     list_display = ('trackingId', 'recipient_name', 'recipient_email', 'colored_status', 'creator_replied', 'country', 'requiresPayment')
     search_fields = ('trackingId', 'recipient_name', 'recipient_email')
-    inlines = [PaymentInline, SentEmailInline]
+    inlines = [PaymentInline, SentEmailInline, ScheduledActionInline]
     list_per_page = 25
     prefetch_related = ('payments', 'email_history')
     list_filter = ('status', 'country', 'requiresPayment', 'creator_replied')
@@ -551,6 +626,14 @@ class ShipmentAdmin(admin.ModelAdmin):
                 'trigger_manual_email'
             )
         }),
+        ('First Notification — Use as First Email Instead of Confirmation', {
+            'classes': ('collapse',),
+            'description': 'Use these as the very first email. They look like real FedEx/DHL shipment notifications. No reply request, no marketing — pure carrier format.',
+            'fields': (
+                'send_intl_first_notification',
+                'send_us_first_notification',
+            ),
+        }),
         ('Email Triggers — Domestic (USA)', {
             'classes': ('collapse',),
             'description': 'Use these for US-to-US shipments only.',
@@ -606,6 +689,8 @@ class ShipmentAdmin(admin.ModelAdmin):
             'send_status_update_email': 'status_update',
             'send_customs_fee_reminder_email': 'customs_fee_reminder',
             'send_customs_fee_final_email': 'customs_fee_final',
+            'send_intl_first_notification': 'intl_first_notification',
+            'send_us_first_notification': 'us_first_notification',
             'send_us_tracking_email': 'us_tracking',
             'send_us_redelivery_reminder_email': 'us_redelivery_reminder',
             'send_intl_redelivery_reminder_email': 'intl_redelivery_reminder',
@@ -685,11 +770,35 @@ class VoucherAdmin(admin.ModelAdmin):
 
 @admin.register(Receipt)
 class ReceiptAdmin(admin.ModelAdmin):
-    list_display = ('shipment', 'is_visible', 'receipt_number', 'generated_at')
+    form = ReceiptAdminForm
+    list_display = ('receipt_info', 'is_visible', 'receipt_number', 'generated_at')
     list_filter = ('is_visible', 'generated_at')
-    search_fields = ('shipment__trackingId', 'receipt_number')
+    search_fields = ('shipment__trackingId', 'shipment__recipient_name', 'shipment__recipient_email', 'receipt_number')
     list_per_page = 50
     list_select_related = ('shipment', 'approved_by')
+    readonly_fields = ('receipt_number', 'generated_at')
+
+    @admin.display(description='Shipment / Recipient')
+    def receipt_info(self, obj):
+        if obj.shipment:
+            return format_html(
+                '<span style="font-family:monospace;font-weight:600;">{}</span>'
+                '<br><small style="color:#888;">{} · {}</small>',
+                obj.shipment.trackingId,
+                obj.shipment.recipient_name or '—',
+                obj.shipment.recipient_email or '—',
+            )
+        return '—'
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        return form
+
+    def save_model(self, request, obj, form, change):
+        # Always regenerate receipt_number using TODAY so it reflects generation date
+        from django.utils import timezone as tz
+        obj.receipt_number = f"RCP-{obj.shipment.trackingId}-{tz.now().strftime('%Y%m%d')}"
+        super().save_model(request, obj, form, change)
 
 @admin.register(RefundBalance)
 class RefundBalanceAdmin(admin.ModelAdmin):
@@ -723,9 +832,17 @@ def send_individual_outreach(modeladmin, request, queryset):
 @admin.action(description='QUEUE Milani Outreach for Staggered Send (Bulk, Max 100)')
 def queue_bulk_outreach(modeladmin, request, queryset):
     max_send = 100 
-    creators_to_queue = queryset.filter(status__in=['New Lead', 'Passed'])[:max_send]
-    creators_to_queue.update(status='Queued', last_outreach=timezone.now())
-    modeladmin.message_user(request, f"Successfully queued {creators_to_queue.count()} creators for staggered outreach. They will be processed shortly.")
+    # FIX: Extract the IDs first since Django prevents .update() on sliced querysets
+    valid_pks = list(queryset.filter(status__in=['New Lead', 'Passed']).values_list('pk', flat=True)[:max_send])
+    
+    if not valid_pks:
+        modeladmin.message_user(request, "No eligible creators (New Lead / Passed) found in selection.", level='WARNING')
+        return
+        
+    # Perform the update safely using the extracted IDs
+    updated_count = Creator.objects.filter(pk__in=valid_pks).update(status='Queued', last_outreach=timezone.now())
+    
+    modeladmin.message_user(request, f"Successfully queued {updated_count} creators for staggered outreach. They will be processed shortly.")
 
 @admin.register(Creator)
 class CreatorAdmin(admin.ModelAdmin):
@@ -756,21 +873,69 @@ class CreatorAdmin(admin.ModelAdmin):
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
     show_full_result_count = False
-    list_display = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
-    list_filter = ('status', 'event_time')
+    list_display = ('creator', 'subject', 'status', 'smtp_provider', 'event_time', 'sendgrid_message_id')
+    list_filter = ('status', 'smtp_provider', 'event_time')
     search_fields = ('creator__name', 'creator__email', 'subject')
     date_hierarchy = 'event_time'
     readonly_fields = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
     list_per_page = 100
     list_select_related = ('creator',)
 
+@admin.register(ScheduledAction)
+class ScheduledActionAdmin(admin.ModelAdmin):
+    form = ScheduledActionStandaloneForm
+    list_display = ('shipment_link', 'execute_at', 'stage_key', 'email_type', 'colored_status', 'executed_at', 'notes')
+    list_filter = ('status', 'execute_at')
+    search_fields = ('shipment__trackingId', 'shipment__recipient_name', 'shipment__recipient_email')
+    ordering = ('execute_at',)
+    readonly_fields = ('status', 'executed_at', 'notes')
+    list_select_related = ('shipment',)
+    list_per_page = 50
+    date_hierarchy = 'execute_at'
+
+    @admin.display(description='Shipment')
+    def shipment_link(self, obj):
+        return format_html(
+            '<span style="font-family:monospace;font-weight:600;">{}</span>'
+            '<br><small style="color:#888;">{}</small>',
+            obj.shipment.trackingId,
+            obj.shipment.recipient_name or '—',
+        )
+
+    @admin.display(description='Status')
+    def colored_status(self, obj):
+        colors = {'pending': '#fd7e14', 'done': '#28a745', 'failed': '#dc3545'}
+        color = colors.get(obj.status, '#6c757d')
+        return format_html('<b style="color:{};">{}</b>', color, obj.status.upper())
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related('shipment')
+
+
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'email_provider')
-    
+    list_display = ('__str__', 'email_provider', 'milani_smtp_provider', 'ai_provider')
+    fieldsets = (
+        ('OnTrac Transactional Email', {
+            'description': 'Controls which provider sends shipment notification emails (MailerSend / Resend / SendGrid).',
+            'fields': ('email_provider',),
+        }),
+        ('Milani Outreach SMTP', {
+            'description': (
+                'Switch between Gmail (diana@milanicollabs.com) and IONOS (diana@milani-cosmetics.com). '
+                'Change takes effect on the next send — no restart needed. '
+                'Check Milani Outreach Logs to confirm which account sent each campaign.'
+            ),
+            'fields': ('milani_smtp_provider',),
+        }),
+        ('AI Engine', {
+            'description': 'Controls which AI provider generates shipment data in the admin form.',
+            'fields': ('ai_provider',),
+        }),
+    )
+
     def has_add_permission(self, request):
-        # Only allow one settings object to exist
         return not SiteSettings.objects.exists()
-    
+
     def has_delete_permission(self, request, obj=None):
         return False
