@@ -1,5 +1,7 @@
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant
+from django.shortcuts import get_object_or_404
+from django.urls import path as url_path
 from django.conf import settings
 import pusher
 from decimal import Decimal
@@ -846,7 +848,7 @@ def queue_bulk_outreach(modeladmin, request, queryset):
 
 @admin.register(Creator)
 class CreatorAdmin(admin.ModelAdmin):
-    list_display = ('name', 'email','colored_status', 'last_outreach', 'country', 'portfolio_link')
+    list_display = ('name', 'email', 'colored_status', 'last_outreach', 'country', 'preview_and_send')
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
     actions = [send_individual_outreach, queue_bulk_outreach]
@@ -868,8 +870,22 @@ class CreatorAdmin(admin.ModelAdmin):
             color = 'inherit' # Default text color
             text = obj.status.upper()
             
-        return format_html('<b style="color: {};">{}</b>', color, text)    
-    
+        return format_html('<b style="color: {};">{}</b>', color, text)
+
+    @admin.display(description='Preview / Send')
+    def preview_and_send(self, obj):
+        from .models import MilaniEmailVariant
+        first = MilaniEmailVariant.objects.filter(is_active=True).first()
+        if not first:
+            return '—'
+        return format_html(
+            '<a href="/admin/api/milaniemailvariant/{}/preview/?creator_id={}" target="_blank" '
+            'style="padding:3px 10px;background:#1a7f5a;color:#fff;border-radius:4px;'
+            'font-size:11px;text-decoration:none;white-space:nowrap;">'
+            '&#128065; Preview &amp; Send</a>',
+            first.pk, obj.pk
+        )
+
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
     show_full_result_count = False
@@ -912,6 +928,804 @@ class ScheduledActionAdmin(admin.ModelAdmin):
         return super().get_queryset(request).select_related('shipment')
 
 
+class MilaniEmailVariantForm(forms.ModelForm):
+    body = forms.CharField(
+        widget=forms.Textarea(attrs={
+            'rows': 20,
+            'style': 'width:100%; font-family: monospace; font-size:13px;',
+        }),
+        help_text=(
+            "Use {name} for creator name, {greeting} for day-aware greeting. "
+            "Separate paragraphs with ONE blank line. No em dashes."
+        )
+    )
+    subject = forms.CharField(
+        widget=forms.TextInput(attrs={'style': 'width:100%;'}),
+        help_text="Use {name} for creator name. No em dashes."
+    )
+
+    class Meta:
+        model = MilaniEmailVariant
+        fields = '__all__'
+
+
+@admin.register(MilaniEmailVariant)
+class MilaniEmailVariantAdmin(admin.ModelAdmin):
+    form = MilaniEmailVariantForm
+    list_display  = ('name', 'subject_preview', 'is_active', 'updated_at', 'preview_link')
+    list_editable = ('is_active',)
+    list_filter   = ('is_active',)
+    search_fields = ('name', 'subject', 'body')
+    readonly_fields = ('created_at', 'updated_at', 'preview_button', 'send_test_widget')
+    list_per_page = 25
+
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'is_active'),
+        }),
+        ('Email Content', {
+            'description': (
+                'Use <strong>{name}</strong> for the creator name. '
+                'Use <strong>{greeting}</strong> for the day-aware greeting sentence. '
+                'Separate paragraphs with a blank line. '
+                '<strong>No em dashes ( — )</strong>.'
+            ),
+            'fields': ('subject', 'body'),
+        }),
+        ('Preview & send', {
+            'description': (
+                'Send this variant to a creator via Resend, or open the full device preview '
+                '(desktop / tablet / iPhone, dark mode, send panel).'
+            ),
+            'fields': ('send_test_widget', 'preview_button'),
+        }),
+        ('Timestamps', {
+            'classes': ('collapse',),
+            'fields': ('created_at', 'updated_at'),
+        }),
+    )
+
+    @admin.display(description='Subject')
+    def subject_preview(self, obj):
+        s = obj.subject.replace('{name}', 'Jane')
+        return s[:60] + '...' if len(s) > 60 else s
+
+    @admin.display(description='Preview')
+    def preview_link(self, obj):
+        return format_html(
+            '<a href="{}" target="_blank" '
+            'style="padding:4px 10px;background:#1a7f5a;color:#fff;'
+            'border-radius:4px;font-size:12px;text-decoration:none;">'
+            '&#128065; Preview &amp; Send</a>',
+            f'/admin/api/milaniemailvariant/{obj.pk}/preview/'
+        )
+
+    @admin.display(description='Send test email')
+    def send_test_widget(self, obj):
+        from html import escape
+
+        if not obj or not obj.pk:
+            return mark_safe('<p style="color:#888;">Save the variant first.</p>')
+
+        creators = Creator.objects.all().order_by('name')[:200]
+        if not creators:
+            return mark_safe('<p style="color:#888;">No creators in the database yet.</p>')
+
+        options = ''.join(
+            f'<option value="{c.pk}">{escape(c.name)} — {escape(c.email)}</option>'
+            for c in creators
+        )
+        send_url = f'/admin/api/milaniemailvariant/{obj.pk}/send-test/'
+
+        return mark_safe(
+            f'<div style="max-width:520px;">'
+            f'<select id="variant-admin-creator" style="width:100%;padding:8px;margin-bottom:10px;">'
+            f'<option value="">Select a creator...</option>{options}</select>'
+            f'<button type="button" id="variant-admin-send-btn" '
+            f'style="padding:8px 16px;background:#1a7f5a;color:#fff;border:none;'
+            f'border-radius:4px;font-weight:600;cursor:pointer;">'
+            f'Send this variant</button>'
+            f'<div id="variant-admin-send-result" style="margin-top:10px;font-size:13px;"></div>'
+            f'</div>'
+            f'<script>'
+            f'(function() {{'
+            f'  const url = "{send_url}";'
+            f'  const btn = document.getElementById("variant-admin-send-btn");'
+            f'  const sel = document.getElementById("variant-admin-creator");'
+            f'  const res = document.getElementById("variant-admin-send-result");'
+            f'  function getCookie(n) {{'
+            f'    const v = document.cookie.match("(^|;) ?" + n + "=([^;]*)(;|$)");'
+            f'    return v ? v[2] : "";'
+            f'  }}'
+            f'  btn.addEventListener("click", function() {{'
+            f'    if (!sel.value) {{'
+            f'      res.style.color = "#dc3545";'
+            f'      res.textContent = "Please select a creator.";'
+            f'      return;'
+            f'    }}'
+            f'    btn.disabled = true;'
+            f'    res.style.color = "#888";'
+            f'    res.textContent = "Sending...";'
+            f'    fetch(url, {{'
+            f'      method: "POST",'
+            f'      headers: {{'
+            f'        "Content-Type": "application/x-www-form-urlencoded",'
+            f'        "X-CSRFToken": getCookie("csrftoken"),'
+            f'      }},'
+            f'      body: "creator_id=" + encodeURIComponent(sel.value),'
+            f'    }})'
+            f'    .then(r => r.json().then(data => ({{ ok: r.ok, data }})))'
+            f'    .then(({{ ok, data }}) => {{'
+            f'      btn.disabled = false;'
+            f'      if (ok && data.success) {{'
+            f'        res.style.color = "#28a745";'
+            f'        res.textContent = "Sent to " + data.email;'
+            f'      }} else {{'
+            f'        res.style.color = "#dc3545";'
+            f'        res.textContent = data.error || "Send failed";'
+            f'      }}'
+            f'    }})'
+            f'    .catch(e => {{'
+            f'      btn.disabled = false;'
+            f'      res.style.color = "#dc3545";'
+            f'      res.textContent = "Network error: " + e;'
+            f'    }});'
+            f'  }});'
+            f'}})();'
+            f'</script>'
+        )
+
+    @admin.display(description='')
+    def preview_button(self, obj):
+        if not obj or not obj.pk:
+            return mark_safe(
+                '<p style="color:#888;">Save the variant first, then the preview button appears here.</p>'
+            )
+        return mark_safe(
+            f'<a href="/admin/api/milaniemailvariant/{obj.pk}/preview/" target="_blank" '
+            f'style="display:inline-block;padding:8px 20px;background:#1a7f5a;color:#fff;'
+            f'border-radius:4px;font-size:13px;font-weight:600;text-decoration:none;">'
+            f'&#128065;&nbsp; Open Full Preview &amp; Send</a>'
+            f'<p style="margin-top:8px;font-size:12px;color:#888;">'
+            f'Opens in a new tab with device preview, dark mode, and a send-test panel '
+            f'(scroll below the email on desktop).</p>'
+        )
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            url_path(
+                '<int:variant_id>/preview/',
+                self.admin_site.admin_view(self.preview_view),
+                name='milaniemailvariant_preview',
+            ),
+            url_path(
+                '<int:variant_id>/send-test/',
+                self.admin_site.admin_view(self.send_test_view),
+                name='milaniemailvariant_send_test',
+            ),
+        ]
+        return custom + urls
+
+    def preview_view(self, request, variant_id):
+        from django.conf import settings as django_settings
+        import base64
+
+        variant = get_object_or_404(MilaniEmailVariant, pk=variant_id)
+        preselect_creator_id = (request.GET.get('creator_id') or '').strip()
+        if preselect_creator_id and not preselect_creator_id.isdigit():
+            preselect_creator_id = ''
+        sample_name  = "Sarah"
+        sample_greeting = "Hope you are having a great week so far!"
+        subject_rendered = variant.subject.replace('{name}', sample_name)
+
+        try:
+            body_rendered = variant.body.format(name=sample_name, greeting=sample_greeting)
+        except KeyError as e:
+            body_rendered = f"[Template error: unknown placeholder {e}]\n\n{variant.body}"
+
+        from_email = 'diana@milani-cosmetics.com'
+        base_url   = getattr(django_settings, 'SHIELDCLIMB_CALLBACK_BASE_URL', 'https://api.ontracourier.us').rstrip('/')
+        pixel_url  = f"{base_url}/api/webhooks/milani-open/?mid=PREVIEW_MODE"
+
+        paragraphs      = body_rendered.strip().split('\n\n')
+        html_paragraphs = []
+        for para in paragraphs:
+            lines = para.strip().split('\n')
+            if len(lines) == 1:
+                html_paragraphs.append(f'<p style="margin:0 0 16px 0;">{lines[0]}</p>')
+            else:
+                inner = '<br>'.join(lines)
+                html_paragraphs.append(f'<p style="margin:0 0 16px 0;">{inner}</p>')
+        body_html_inner = '\n    '.join(html_paragraphs)
+
+        email_html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="color-scheme" content="light dark">
+  <meta name="supported-color-schemes" content="light dark">
+  <style>
+    :root {{ color-scheme: light dark; }}
+    body {{
+      font-family: 'Aptos', 'Segoe UI', Arial, sans-serif;
+      font-size: 15px; line-height: 1.6; margin: 0; padding: 0;
+      background: #ffffff; color: #000000;
+    }}
+    .email-container {{ max-width: 540px; margin: 36px auto; padding: 0 24px; }}
+    .unsub-text {{ font-size: 11px; color: #999; margin-top: 24px;
+                   border-top: 1px solid #e8e8e8; padding-top: 16px; }}
+    .unsub-link {{ color: #999; text-decoration: underline; }}
+    @media (prefers-color-scheme: dark) {{
+      body, .email-container {{ background-color: #121212 !important; color: #e0e0e0 !important; }}
+      .unsub-text {{ color: #777 !important; border-top-color: #333 !important; }}
+      .unsub-link {{ color: #777 !important; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="email-container">
+    {body_html_inner}
+    <p class="unsub-text">
+      You are receiving this email because we identified you as a great fit for our
+      upcoming campaigns. If you are not interested in brand partnerships at this time,
+      you can <a href="mailto:{from_email}?subject=Unsubscribe" class="unsub-link">unsubscribe here</a>.
+    </p>
+    <img src="{pixel_url}" width="1" height="1" border="0"
+         style="display:block;height:1px;width:1px;border:0;margin:0;padding:0;" alt="">
+  </div>
+</body>
+</html>"""
+
+        email_b64 = base64.b64encode(email_html.encode()).decode()
+        updated_str = variant.updated_at.strftime('%b %d, %Y %H:%M UTC')
+        active_str  = 'Active' if variant.is_active else 'Paused'
+
+        preview_page = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Preview: {variant.name}</title>
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+             background: #0f0f0f; color: #e0e0e0; min-height: 100vh; }}
+    .topbar {{ position: sticky; top: 0; z-index: 100; background: #1a1a1a;
+                border-bottom: 1px solid #333; padding: 12px 24px;
+                display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }}
+    .topbar h1 {{ font-size: 14px; font-weight: 600; color: #fff; flex: 1; min-width: 200px; }}
+    .topbar h1 span {{ color: #4ade80; }}
+    .subject-bar {{ background: #1e1e1e; border-bottom: 1px solid #2a2a2a;
+                    padding: 10px 24px; font-size: 13px; color: #aaa; }}
+    .subject-bar strong {{ color: #fff; }}
+    .tab-group {{ display: flex; gap: 6px; }}
+    .tab {{ padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+             cursor: pointer; border: 1px solid #444; background: #2a2a2a; color: #aaa;
+             transition: all .15s; user-select: none; }}
+    .tab.active, .tab:hover {{ background: #1a7f5a; border-color: #1a7f5a; color: #fff; }}
+    .mode-toggle {{ display: flex; align-items: center; gap: 8px; font-size: 12px; color: #aaa; }}
+    .toggle-switch {{ position: relative; width: 40px; height: 22px; cursor: pointer; }}
+    .toggle-switch input {{ display: none; }}
+    .toggle-track {{ position: absolute; inset: 0; background: #444; border-radius: 11px; transition: background .2s; }}
+    .toggle-switch input:checked + .toggle-track {{ background: #1a7f5a; }}
+    .toggle-knob {{ position: absolute; top: 3px; left: 3px; width: 16px; height: 16px;
+                    background: #fff; border-radius: 50%; transition: transform .2s; }}
+    .toggle-switch input:checked ~ .toggle-knob {{ transform: translateX(18px); }}
+    .stage {{ padding: 40px 24px; display: flex; justify-content: center;
+               align-items: flex-start; min-height: calc(100vh - 130px); }}
+    /* Desktop / Tablet frames */
+    .device-wrap {{ display: flex; flex-direction: column; align-items: center; }}
+    .device-frame {{ background: #fff; border-radius: 12px; overflow: hidden;
+                      box-shadow: 0 0 0 2px #333, 0 20px 60px rgba(0,0,0,.6);
+                      transition: width .3s ease; }}
+    .device-frame.dark-mode {{ background: #121212; }}
+    .device-frame.desktop {{ width: 860px; max-width: 100%; }}
+    .device-frame.tablet  {{ width: 600px; max-width: 100%; }}
+    .device-chrome {{ background: #f5f5f5; padding: 10px 16px; border-bottom: 1px solid #ddd;
+                       display: flex; align-items: center; gap: 8px; font-size: 11px; color: #888; }}
+    .device-frame.dark-mode .device-chrome {{ background: #1e1e1e; border-color: #333; color: #666; }}
+    .dots span {{ display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; }}
+    .dots .r {{ background: #ff5f57; }} .dots .y {{ background: #ffbd2e; }} .dots .g {{ background: #28c840; }}
+    .email-wrapper {{ overflow-y: auto; max-height: 680px; }}
+    iframe {{ width: 100%; border: none; display: block; min-height: 400px; background: transparent; }}
+    /* iPhone frame */
+    .iphone-outer {{
+      width: 393px; background: #1a1a1a; border-radius: 52px;
+      box-shadow: 0 0 0 1px #444, 0 0 0 10px #222, 0 0 0 12px #555, 0 30px 80px rgba(0,0,0,.8);
+      padding: 12px; position: relative;
+    }}
+    .iphone-screen {{
+      background: #fff; border-radius: 42px; overflow: hidden;
+      height: 720px; display: flex; flex-direction: column; position: relative;
+    }}
+    .iphone-screen.dark {{ background: #000; }}
+    .iphone-status {{
+      background: #fff; padding: 14px 28px 6px; display: flex;
+      justify-content: space-between; align-items: center; flex-shrink: 0;
+    }}
+    .iphone-screen.dark .iphone-status {{ background: #000; color: #fff; }}
+    .iphone-status .time {{ font-size: 15px; font-weight: 700; letter-spacing: -0.3px; }}
+    .iphone-status .icons {{ font-size: 12px; display: flex; gap: 5px; align-items: center; }}
+    .iphone-notch {{
+      position: absolute; top: 0; left: 50%; transform: translateX(-50%);
+      width: 126px; height: 34px; background: #1a1a1a; border-radius: 0 0 20px 20px;
+      z-index: 10;
+    }}
+    .mail-navbar {{
+      background: #f2f2f7; border-bottom: 1px solid #d1d1d6;
+      padding: 8px 16px; display: flex; justify-content: space-between;
+      align-items: center; flex-shrink: 0;
+    }}
+    .iphone-screen.dark .mail-navbar {{ background: #1c1c1e; border-color: #38383a; }}
+    .mail-navbar .back {{ color: #007aff; font-size: 17px; display: flex; align-items: center; gap: 4px; }}
+    .iphone-screen.dark .mail-navbar .back {{ color: #0a84ff; }}
+    .mail-navbar .title {{ font-size: 17px; font-weight: 600; color: #000; }}
+    .iphone-screen.dark .mail-navbar .title {{ color: #fff; }}
+    .mail-navbar .icons {{ display: flex; gap: 16px; }}
+    .mail-navbar .icons span {{ font-size: 20px; color: #007aff; cursor: pointer; }}
+    .iphone-screen.dark .mail-navbar .icons span {{ color: #0a84ff; }}
+    .mail-header {{
+      padding: 12px 16px 10px; border-bottom: 1px solid #e5e5ea; flex-shrink: 0;
+      background: #fff;
+    }}
+    .iphone-screen.dark .mail-header {{ background: #000; border-color: #38383a; }}
+    .mail-subject-line {{
+      font-size: 22px; font-weight: 700; color: #000; line-height: 1.2; margin-bottom: 10px;
+    }}
+    .iphone-screen.dark .mail-subject-line {{ color: #fff; }}
+    .mail-sender-row {{ display: flex; align-items: center; gap: 10px; }}
+    .mail-avatar {{
+      width: 36px; height: 36px; border-radius: 50%;
+      background: linear-gradient(135deg, #c0392b, #e74c3c);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 14px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }}
+    .mail-sender-info {{ flex: 1; min-width: 0; }}
+    .mail-sender-name {{ font-size: 15px; font-weight: 600; color: #000; }}
+    .iphone-screen.dark .mail-sender-name {{ color: #fff; }}
+    .mail-sender-meta {{ font-size: 13px; color: #8e8e93; margin-top: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }}
+    .mail-time {{ font-size: 13px; color: #8e8e93; flex-shrink: 0; }}
+    .mail-body-scroll {{ flex: 1; overflow-y: auto; background: #fff; }}
+    .iphone-screen.dark .mail-body-scroll {{ background: #000; }}
+    .mail-body-scroll iframe {{ width: 100%; border: none; min-height: 400px; }}
+    .iphone-bottom-bar {{
+      background: #f2f2f7; border-top: 1px solid #d1d1d6;
+      padding: 10px 40px; display: flex; justify-content: space-between;
+      align-items: center; flex-shrink: 0;
+    }}
+    .iphone-screen.dark .iphone-bottom-bar {{ background: #1c1c1e; border-color: #38383a; }}
+    .iphone-bottom-bar span {{ font-size: 22px; color: #007aff; }}
+    .iphone-screen.dark .iphone-bottom-bar span {{ color: #0a84ff; }}
+    .home-indicator {{
+      width: 134px; height: 5px; background: #1a1a1a; border-radius: 3px;
+      margin: 8px auto 4px;
+    }}
+    /* Send panel */
+    .send-panel {{
+      background: #1e1e1e; border: 1px solid #333; border-radius: 10px;
+      padding: 16px; margin-top: 20px; width: 100%; max-width: 500px;
+    }}
+    .send-panel h3 {{ font-size: 13px; font-weight: 600; color: #aaa;
+                       text-transform: uppercase; letter-spacing: .5px; margin-bottom: 12px; }}
+    .send-panel select, .send-panel input {{
+      width: 100%; padding: 8px 12px; background: #2a2a2a; border: 1px solid #444;
+      border-radius: 6px; color: #fff; font-size: 13px; margin-bottom: 10px;
+    }}
+    .send-panel button {{
+      width: 100%; padding: 10px; background: #1a7f5a; color: #fff; border: none;
+      border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+    }}
+    .send-panel button:hover {{ background: #156a4a; }}
+    .send-result {{ margin-top: 8px; font-size: 12px; padding: 6px 10px;
+                    border-radius: 4px; display: none; }}
+    .send-result.ok  {{ background: #1a3a2a; color: #4ade80; display: block; }}
+    .send-result.err {{ background: #3a1a1a; color: #f87171; display: block; }}
+    .meta-strip {{ background: #1a1a1a; border-top: 1px solid #2a2a2a; padding: 12px 24px;
+                    display: flex; gap: 24px; flex-wrap: wrap; font-size: 12px; color: #666; }}
+    .meta-strip span strong {{ color: #aaa; }}
+    @media (max-width: 920px) {{
+      .device-frame.desktop, .device-frame.tablet {{ width: 100%; }}
+    }}
+  </style>
+</head>
+<body>
+<div class="topbar">
+  <h1>Email Preview &nbsp;/&nbsp; <span>{variant.name}</span></h1>
+  <div class="tab-group">
+    <div class="tab active" onclick="setDevice('desktop',this)">&#128513; Desktop</div>
+    <div class="tab" onclick="setDevice('tablet',this)">&#128203; Tablet</div>
+    <div class="tab" onclick="setDevice('mobile',this)">&#128241; iPhone</div>
+  </div>
+  <div class="mode-toggle">
+    &#9728;
+    <label class="toggle-switch">
+      <input type="checkbox" id="modeToggle" onchange="toggleDark(this)">
+      <div class="toggle-track"></div>
+      <div class="toggle-knob"></div>
+    </label>
+    &#127769; Dark
+  </div>
+  <a href="/admin/api/milaniemailvariant/{variant.pk}/change/"
+     style="padding:6px 14px;background:#333;color:#ccc;border-radius:6px;
+            font-size:12px;text-decoration:none;border:1px solid #444;">
+    &#9998; Edit Variant
+  </a>
+</div>
+
+<div class="subject-bar" id="subjectBar">
+  <strong>Subject:</strong>&nbsp; <span id="subjectDisplay">{subject_rendered}</span> &nbsp;&nbsp;
+  <strong>From:</strong>&nbsp; <span id="fromDisplay">Diana Higuera &lt;{from_email}&gt;</span> &nbsp;&nbsp;
+  <strong>Previewing as:</strong>&nbsp; <span id="nameDisplay">Sample (Sarah)</span>
+</div>
+
+<div class="stage" id="stage">
+
+  <!-- Desktop / Tablet -->
+  <div class="device-wrap" id="desktopWrap">
+    <div class="device-frame desktop" id="deviceFrame">
+      <div class="device-chrome">
+        <div class="dots"><span class="r"></span><span class="y"></span><span class="g"></span></div>
+        <span style="margin-left:8px;font-size:12px;">Email client — Desktop</span>
+      </div>
+      <div class="email-wrapper">
+        <iframe id="emailFrame" title="Email Preview" sandbox="allow-same-origin"></iframe>
+      </div>
+    </div>
+    <div class="send-panel" id="sendPanel">
+      <h3>&#9993; Send Test Email</h3>
+      <select id="creatorSelect" onchange="updatePreviewName(this)">
+        <option value="">Select a creator to send to...</option>
+      </select>
+      <button onclick="sendTest()">Send this variant to selected creator</button>
+      <div class="send-result" id="sendResult"></div>
+    </div>
+  </div>
+
+  <!-- iPhone -->
+  <div id="iphoneWrap" style="display:none;">
+    <div class="iphone-outer">
+      <div class="iphone-screen" id="iphoneScreen">
+        <div class="iphone-notch"></div>
+        <div class="iphone-status">
+          <span class="time">9:41</span>
+          <span class="icons">
+            <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor">
+              <rect x="0" y="3" width="3" height="9" rx="1"/><rect x="4.5" y="2" width="3" height="10" rx="1"/>
+              <rect x="9" y="0" width="3" height="12" rx="1"/><rect x="13.5" y="0" width="3" height="12" rx="1"/>
+            </svg>
+            <svg width="16" height="12" viewBox="0 0 16 12" fill="currentColor">
+              <path d="M8 2.4C5.8 2.4 3.8 3.3 2.4 4.8L1 3.4C2.8 1.3 5.3 0 8 0s5.2 1.3 7 3.4L13.6 4.8C12.2 3.3 10.2 2.4 8 2.4z"/>
+              <path d="M8 5.6c-1.5 0-2.8.6-3.8 1.6L2.8 5.8C4.1 4.4 5.9 3.6 8 3.6s3.9.8 5.2 2.2L11.8 7.2C10.8 6.2 9.5 5.6 8 5.6z"/>
+              <circle cx="8" cy="10" r="2"/>
+            </svg>
+            <svg width="25" height="12" viewBox="0 0 25 12" fill="currentColor">
+              <rect x="0" y="1" width="21" height="10" rx="2.5" stroke="currentColor" stroke-width="1" fill="none" opacity=".35"/>
+              <rect x="1.5" y="2.5" width="16" height="7" rx="1.5"/>
+              <path d="M23 4.5v3a1.5 1.5 0 000-3z" opacity=".4"/>
+            </svg>
+          </span>
+        </div>
+        <div class="mail-navbar">
+          <span class="back">&#8249; Inbox</span>
+          <span class="title"></span>
+          <div class="icons">
+            <span title="Archive">&#128190;</span>
+            <span title="Move">&#128193;</span>
+            <span title="Delete">&#128465;</span>
+          </div>
+        </div>
+        <div class="mail-header">
+          <div class="mail-subject-line" id="iphoneSubject">{subject_rendered}</div>
+          <div class="mail-sender-row">
+            <div class="mail-avatar">D</div>
+            <div class="mail-sender-info">
+              <div class="mail-sender-name" id="iphoneFromName">Diana Higuera</div>
+              <div class="mail-sender-meta" id="iphoneFromEmail">To: <span id="iphoneToName">Sarah</span></div>
+            </div>
+            <div class="mail-time">Now</div>
+          </div>
+        </div>
+        <div class="mail-body-scroll">
+          <iframe id="iphoneFrame" title="iPhone Email Preview" sandbox="allow-same-origin"
+                  style="width:100%;border:none;min-height:360px;"></iframe>
+        </div>
+        <div class="iphone-bottom-bar">
+          <span title="Archive">&#128190;</span>
+          <span title="Reply">&#8629;</span>
+          <span title="Flag">&#127988;</span>
+          <span title="Move">&#128193;</span>
+          <span title="Compose">&#9997;</span>
+        </div>
+      </div>
+      <div class="home-indicator"></div>
+    </div>
+    <div class="send-panel" style="max-width:393px;margin-top:20px;">
+      <h3>&#9993; Send Test Email</h3>
+      <select id="creatorSelectMobile" onchange="updatePreviewName(this)">
+        <option value="">Select a creator to send to...</option>
+      </select>
+      <button onclick="sendTestMobile()">Send this variant to selected creator</button>
+      <div class="send-result" id="sendResultMobile"></div>
+    </div>
+  </div>
+
+</div>
+
+<div class="meta-strip">
+  <span><strong>Variant:</strong> {variant.name}</span>
+  <span><strong>Status:</strong> {active_str}</span>
+  <span><strong>Last updated:</strong> {updated_str}</span>
+  <span><strong>Placeholders:</strong> {{name}}, {{greeting}}</span>
+  <span><strong>Note:</strong> Pixel is in preview mode — not recording opens</span>
+</div>
+
+<script>
+const EMAIL_HTML_LIGHT = atob("{email_b64}");
+const VARIANT_ID       = {variant.pk};
+const PRESELECT_CREATOR_ID = '{preselect_creator_id}';
+const CSRF_TOKEN       = getCookie('csrftoken');
+let   currentCreatorId = null;
+let   currentDevice    = 'desktop';
+let   isDark           = false;
+
+// Build email HTML with forced colour scheme
+function buildEmailHtml(dark, name) {{
+  let html = EMAIL_HTML_LIGHT;
+  // Personalise name
+  html = html.split('Sarah').join(name || 'Sarah');
+  if (dark) {{
+    // Force dark background inline so media query isn't needed
+    html = html.replace(
+      '<body',
+      '<body style="background:#121212 !important;color:#e0e0e0 !important;"'
+    );
+  }} else {{
+    // Force light background inline
+    html = html.replace(
+      '<body',
+      '<body style="background:#ffffff !important;color:#000000 !important;"'
+    );
+  }}
+  return html;
+}}
+
+function injectEmail(frameId, dark, name) {{
+  const frame = document.getElementById(frameId);
+  if (!frame) return;
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(buildEmailHtml(dark, name));
+  doc.close();
+  setTimeout(() => {{
+    try {{ frame.style.height = (doc.body.scrollHeight + 40) + 'px'; }} catch(e) {{}}
+  }}, 200);
+}}
+
+function getCurrentName() {{
+  const sel = document.getElementById('creatorSelect');
+  const opt = sel && sel.selectedOptions[0];
+  return opt && opt.dataset.name ? opt.dataset.name : 'Sarah';
+}}
+
+function setDevice(type, el) {{
+  currentDevice = type;
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  const dw = document.getElementById('desktopWrap');
+  const iw = document.getElementById('iphoneWrap');
+  if (type === 'mobile') {{
+    dw.style.display = 'none'; iw.style.display = 'flex';
+    iw.style.flexDirection = 'column'; iw.style.alignItems = 'center';
+    const s = document.getElementById('iphoneScreen');
+    s.className = 'iphone-screen' + (isDark ? ' dark' : '');
+    injectEmail('iphoneFrame', isDark, getCurrentName());
+  }} else {{
+    dw.style.display = 'flex'; dw.style.flexDirection = 'column'; dw.style.alignItems = 'center';
+    iw.style.display = 'none';
+    const df = document.getElementById('deviceFrame');
+    df.className = 'device-frame ' + type + (isDark ? ' dark-mode' : '');
+    injectEmail('emailFrame', isDark, getCurrentName());
+  }}
+}}
+
+function toggleDark(cb) {{
+  isDark = cb.checked;
+  const df = document.getElementById('deviceFrame');
+  const is = document.getElementById('iphoneScreen');
+  if (isDark) {{
+    df.classList.add('dark-mode');
+    is.classList.add('dark');
+  }} else {{
+    df.classList.remove('dark-mode');
+    is.classList.remove('dark');
+  }}
+  const name = getCurrentName();
+  injectEmail('emailFrame', isDark, name);
+  injectEmail('iphoneFrame', isDark, name);
+}}
+
+function updatePreviewName(sel) {{
+  const opt = sel.selectedOptions[0];
+  if (!opt || !opt.value) return;
+  currentCreatorId = opt.value;
+  const name = opt.dataset.name || 'Sarah';
+  const email = opt.dataset.email || '';
+  // Sync both selects
+  ['creatorSelect','creatorSelectMobile'].forEach(id => {{
+    const s = document.getElementById(id);
+    if (s) s.value = opt.value;
+  }});
+  // Update subject bar
+  document.getElementById('nameDisplay').textContent = name + ' (' + email + ')';
+  // Update iPhone header
+  document.getElementById('iphoneToName').textContent = name;
+  // Re-render email with real name
+  injectEmail('emailFrame',   isDark, name);
+  injectEmail('iphoneFrame',  isDark, name);
+}}
+
+function sendTest()       {{ doSend('creatorSelect',       'sendResult'); }}
+function sendTestMobile() {{ doSend('creatorSelectMobile', 'sendResultMobile'); }}
+
+function doSend(selectId, resultId) {{
+  const sel = document.getElementById(selectId);
+  const res = document.getElementById(resultId);
+  if (!sel.value) {{
+    res.className = 'send-result err';
+    res.textContent = 'Please select a creator first.';
+    return;
+  }}
+  res.className = 'send-result';
+  res.textContent = 'Sending...';
+  res.style.display = 'block';
+
+  fetch('/admin/api/milaniemailvariant/' + VARIANT_ID + '/send-test/', {{
+    method: 'POST',
+    headers: {{ 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRFToken': CSRF_TOKEN }},
+    body: 'creator_id=' + encodeURIComponent(sel.value),
+  }})
+  .then(r => r.json())
+  .then(data => {{
+    if (data.success) {{
+      res.className = 'send-result ok';
+      res.textContent = '✅ Sent to ' + data.email;
+    }} else {{
+      res.className = 'send-result err';
+      res.textContent = '❌ ' + (data.error || 'Send failed');
+    }}
+  }})
+  .catch(e => {{
+    res.className = 'send-result err';
+    res.textContent = '❌ Network error: ' + e;
+  }});
+}}
+
+function getCookie(name) {{
+  const v = document.cookie.match('(^|;) ?' + name + '=([^;]*)(;|$)');
+  return v ? v[2] : '';
+}}
+
+// Load creators for selects
+fetch('/admin/api/milaniemailvariant/{variant.pk}/send-test/')
+  .then(r => {{
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    return r.json();
+  }})
+  .then(creators => {{
+    ['creatorSelect','creatorSelectMobile'].forEach(selId => {{
+      const sel = document.getElementById(selId);
+      creators.forEach(c => {{
+        const opt = document.createElement('option');
+        opt.value       = c.id;
+        opt.dataset.name  = c.name;
+        opt.dataset.email = c.email;
+        opt.textContent = c.name + ' — ' + c.email;
+        sel.appendChild(opt);
+      }});
+    }});
+    if (PRESELECT_CREATOR_ID) {{
+      const sel = document.getElementById('creatorSelect');
+      if (sel) {{
+        sel.value = PRESELECT_CREATOR_ID;
+        updatePreviewName(sel);
+      }}
+    }}
+  }})
+  .catch(e => {{
+    console.error('Failed to load creators:', e);
+    ['creatorSelect','creatorSelectMobile'].forEach(selId => {{
+      const sel = document.getElementById(selId);
+      if (sel) sel.innerHTML = '<option value="">Could not load creators</option>';
+    }});
+  }});
+
+// Init
+window.addEventListener('load', () => {{
+  injectEmail('emailFrame',  false, 'Sarah');
+  injectEmail('iphoneFrame', false, 'Sarah');
+}});
+</script>
+</body>
+</html>"""
+
+        return HttpResponse(preview_page, content_type='text/html')
+
+
+    def send_test_view(self, request, variant_id):
+        """
+        GET  — returns JSON list of all creators for the preview dropdown.
+        POST — sends this specific variant to the selected creator.
+        """
+        import json as _json
+        from .models import Creator as CreatorModel
+        from api.milani_email_service import send_specific_milani_variant, _get_provider_config
+
+        variant = get_object_or_404(MilaniEmailVariant, pk=variant_id)
+
+        if request.method == 'GET':
+            creators = list(
+                CreatorModel.objects.all().order_by('name')
+                .values('id', 'name', 'email')[:200]
+            )
+            return HttpResponse(
+                _json.dumps(creators),
+                content_type='application/json'
+            )
+
+        if request.method == 'POST':
+            creator_id = request.POST.get('creator_id')
+            if not creator_id:
+                return HttpResponse(
+                    _json.dumps({'success': False, 'error': 'No creator selected.'}),
+                    content_type='application/json'
+                )
+            try:
+                creator = CreatorModel.objects.get(pk=creator_id)
+                config = _get_provider_config()
+                api_key = getattr(settings, config['api_key_setting'], '')
+                if not api_key:
+                    return HttpResponse(
+                        _json.dumps({
+                            'success': False,
+                            'error': (
+                                f"Resend API key not set ({config['api_key_setting']}). "
+                                f"Check Site Settings provider and your .env."
+                            ),
+                        }),
+                        content_type='application/json'
+                    )
+                ok = send_specific_milani_variant(creator, variant.subject, variant.body)
+                if ok:
+                    return HttpResponse(
+                        _json.dumps({'success': True, 'email': creator.email}),
+                        content_type='application/json'
+                    )
+                else:
+                    return HttpResponse(
+                        _json.dumps({
+                            'success': False,
+                            'error': (
+                                'Send failed — check app logs. '
+                                'Common causes: invalid template placeholders, Resend rejection.'
+                            ),
+                        }),
+                        content_type='application/json'
+                    )
+            except CreatorModel.DoesNotExist:
+                return HttpResponse(
+                    _json.dumps({'success': False, 'error': 'Creator not found.'}),
+                    content_type='application/json'
+                )
+            except Exception as e:
+                return HttpResponse(
+                    _json.dumps({'success': False, 'error': str(e)}),
+                    content_type='application/json'
+                )
+
+        return HttpResponse(status=405)
+
+
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'email_provider', 'milani_smtp_provider', 'ai_provider')
@@ -920,11 +1734,12 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             'description': 'Controls which provider sends shipment notification emails (MailerSend / Resend / SendGrid).',
             'fields': ('email_provider',),
         }),
-        ('Milani Outreach SMTP', {
+        ('Milani Outreach Provider', {
             'description': (
-                'Switch between Gmail (diana@milanicollabs.com) and IONOS (diana@milani-cosmetics.com). '
-                'Change takes effect on the next send — no restart needed. '
-                'Check Milani Outreach Logs to confirm which account sent each campaign.'
+                'Switch between Resend accounts for Milani outreach. '
+                'resend_cosmetics sends from diana@milani-cosmetics.com. '
+                'resend_collabs sends from diana@milanicollabs.com. '
+                'Change takes effect on the next send — no restart needed.'
             ),
             'fields': ('milani_smtp_provider',),
         }),

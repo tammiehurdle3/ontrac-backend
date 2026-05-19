@@ -173,6 +173,8 @@ SENDGRID_TRANSACTIONAL_API_KEY = env('SENDGRID_TRANSACTIONAL_API_KEY', default='
 RESEND_MILANI_API_KEY = env('RESEND_MILANI_API_KEY', default=None)
 MILANI_SENDER_NAME = env('MILANI_SENDER_NAME', default='Diana Higuera')
 MILANI_SENDER_EMAIL = env('MILANI_SENDER_EMAIL', default='diana@milanicollabs.com')
+# Milani outreach — milani-cosmetics.com Resend account
+MILANI_COSMETICS_RESEND_API_KEY = env('MILANI_COSMETICS_RESEND_API_KEY', default='')
 
 MILANI_SMTP_HOST = 'smtp.gmail.com'
 MILANI_SMTP_PORT = 587

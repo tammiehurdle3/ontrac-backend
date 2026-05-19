@@ -155,10 +155,13 @@ class Creator(models.Model):
 
 class MilaniOutreachLog(models.Model):
     PROVIDER_CHOICES = [
-        ('gmail', 'Gmail (diana@milanicollabs.com)'),
-        ('ionos', 'IONOS (diana@milani-cosmetics.com)'),
-        ('resend', 'Resend'),
-        ('sendgrid', 'SendGrid'),
+        ('resend_cosmetics', 'Resend — diana@milani-cosmetics.com'),
+        ('resend_collabs',   'Resend — diana@milanicollabs.com'),
+        ('resend',           'Resend (legacy)'),
+        ('sendgrid',         'SendGrid (legacy)'),
+        ('gmail',            'Gmail (legacy)'),
+        ('ionos',            'IONOS (legacy)'),
+        ('test',             'Test Mode'),
     ]
     creator = models.ForeignKey(Creator, related_name='outreach_history', on_delete=models.CASCADE)
     subject = models.CharField(max_length=255, default='Milani Cosmetics Partnership Opportunity')
@@ -175,6 +178,44 @@ class MilaniOutreachLog(models.Model):
         verbose_name_plural = "Milani Outreach Logs"
     def __str__(self):
         return f"{self.status} - {self.creator.name}"
+
+
+class MilaniEmailVariant(models.Model):
+    """
+    Admin-editable email copy variants for Milani outreach.
+    Active variants are randomly selected at send time.
+    Use {name} for creator name, {greeting} for day-aware greeting.
+    """
+    name = models.CharField(
+        max_length=100,
+        help_text="Internal label only. e.g. 'Variant A Summer 2026'"
+    )
+    subject = models.CharField(
+        max_length=255,
+        help_text="Subject line. Use {name} for creator name. No em dashes."
+    )
+    body = models.TextField(
+        help_text=(
+            "Email body. Use {name} for creator name, {greeting} for greeting. "
+            "Separate paragraphs with a blank line. No em dashes."
+        )
+    )
+    is_active = models.BooleanField(
+        default=True,
+        help_text="Only active variants are included in the random send rotation."
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        verbose_name = 'Milani Email Variant'
+        verbose_name_plural = 'Milani Email Variants'
+        ordering = ['name']
+
+    def __str__(self):
+        status = 'Active' if self.is_active else 'Paused'
+        return f"{self.name} [{status}]"
+
 
 REFUND_STATUS_CHOICES = [
     ('AVAILABLE', 'Available for Claim'),
@@ -319,14 +360,14 @@ class SiteSettings(models.Model):
     )
 
     MILANI_SMTP_PROVIDER_CHOICES = [
-        ('gmail', 'Gmail — diana@milanicollabs.com (Google Workspace)'),
-        ('ionos', 'IONOS — diana@milani-cosmetics.com (milani-cosmetics.com)'),
+        ('resend_cosmetics', 'Resend — diana@milani-cosmetics.com'),
+        ('resend_collabs',   'Resend — diana@milanicollabs.com'),
     ]
     milani_smtp_provider = models.CharField(
         max_length=20,
         choices=MILANI_SMTP_PROVIDER_CHOICES,
-        default='gmail',
-        help_text="Active SMTP account for Milani outreach. Switch here to rotate sending domain."
+        default='resend_cosmetics',
+        help_text="Active Resend account for Milani outreach. Switch to rotate sending domain."
     )
 
     @classmethod
