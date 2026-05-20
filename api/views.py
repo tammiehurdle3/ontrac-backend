@@ -546,23 +546,35 @@ def resend_milani_webhook(request):
             creator = Creator.objects.filter(email=email).first()
             if creator:
                 status_map = {
-                    'email.opened': 'Opened',
-                    'email.clicked': 'Clicked',
-                    'email.bounced': 'Bounced',
-                    'email.delivered': 'Delivered',
+                    'email.sent':       'Sent',
+                    'email.delivered':  'Delivered',
+                    'email.opened':     'Opened',
+                    'email.clicked':    'Clicked',
+                    'email.bounced':    'Bounced',
+                    'email.complained': 'Reported Spam',
                 }
-                new_status = status_map.get(event_type)
-                if new_status:
-                    creator.status = new_status
-                    creator.save()
+                mapped_status = status_map.get(event_type)
+                if not mapped_status:
+                    return JsonResponse({'status': 'ignored - unknown event'}, status=200)
 
-                MilaniOutreachLog.objects.create(
-                    creator=creator,
-                    subject=data.get('subject', 'Milani Cosmetics Partnership Opportunity'),
-                    status=event_type,
-                    sendgrid_message_id=data.get('email_id', ''),
-                    event_time=timezone.now()
-                )
+                # Only upgrade status, never downgrade
+                _rank = {'Sent': 1, 'Delivered': 2, 'Opened': 3, 'Clicked': 4, 'Reported Spam': 5, 'Bounced': 5}
+                if _rank.get(mapped_status, 0) > _rank.get(creator.status, 0):
+                    creator.status = mapped_status
+                    creator.save(update_fields=['status'])
+
+                # get_or_create handles Resend webhook retries gracefully
+                email_id = data.get('email_id', '')
+                if email_id:
+                    MilaniOutreachLog.objects.get_or_create(
+                        sendgrid_message_id=email_id,
+                        defaults={
+                            'creator': creator,
+                            'subject': data.get('subject', 'Milani Cosmetics Partnership Opportunity'),
+                            'status':  mapped_status,
+                            'event_time': timezone.now(),
+                        }
+                    )
 
             return JsonResponse({'status': 'success'}, status=200)
 
