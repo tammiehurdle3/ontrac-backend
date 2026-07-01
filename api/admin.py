@@ -21,7 +21,7 @@ from django import forms
 from django.utils.safestring import mark_safe
 
 import csv
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from .package_generator.generator import generate_delivery_photo
 
 
@@ -846,15 +846,180 @@ def queue_bulk_outreach(modeladmin, request, queryset):
     
     modeladmin.message_user(request, f"Successfully queued {updated_count} creators for staggered outreach. They will be processed shortly.")
 
+class MilaniOutreachToolsWidget(forms.Widget):
+    def render(self, name, value, attrs=None, renderer=None):
+        check_url = '/admin/api/creator/check-email/'
+        return mark_safe(
+            f'<div id="creator-outreach-panel" style="max-width:560px;">'
+            f'<div id="creator-email-check-status" style="font-size:13px;margin-bottom:16px;color:#888;">'
+            f'Enter an email above to check if it is already in the database.</div>'
+            f'<div style="margin-bottom:16px;padding:14px;background:#f0faf5;border:2px solid #1a7f5a;'
+            f'border-radius:6px;">'
+            f'<button type="submit" name="_save_and_send" value="1" id="creator-save-and-send-btn" '
+            f'style="padding:12px 24px;background:#1a7f5a;color:#fff;border:none;'
+            f'border-radius:4px;font-weight:700;font-size:15px;cursor:pointer;">'
+            f'Save &amp; Send Outreach</button>'
+            f'<p style="margin:10px 0 0;font-size:13px;color:#333;">'
+            f'Saves this creator and immediately sends a Milani outreach email (random active variant).</p>'
+            f'</div>'
+            f'<div id="creator-send-now-wrap" style="display:none;margin-bottom:12px;">'
+            f'<button type="button" id="creator-send-outreach-btn" '
+            f'style="padding:8px 16px;background:#1a7f5a;color:#fff;border:none;'
+            f'border-radius:4px;font-weight:600;cursor:pointer;">'
+            f'Send outreach now (without saving again)</button>'
+            f'<div id="creator-send-outreach-result" style="margin-top:8px;font-size:13px;"></div>'
+            f'</div>'
+            f'</div>'
+            f'<script>'
+            f'(function() {{'
+            f'  function initCreatorOutreachTools() {{'
+            f'    const checkUrl = "{check_url}";'
+            f'    const emailInput = document.getElementById("id_email");'
+            f'    const statusEl = document.getElementById("creator-email-check-status");'
+            f'    const sendWrap = document.getElementById("creator-send-now-wrap");'
+            f'    const sendBtn = document.getElementById("creator-send-outreach-btn");'
+            f'    const sendRes = document.getElementById("creator-send-outreach-result");'
+            f'    if (!emailInput || !statusEl) return;'
+            f'    const pathMatch = window.location.pathname.match(/\\/creator\\/(\\d+)\\//);'
+            f'    const creatorPk = pathMatch ? pathMatch[1] : "";'
+            f'    const sendUrl = creatorPk ? ("/admin/api/creator/" + creatorPk + "/send-outreach/") : null;'
+            f'    if (creatorPk && sendWrap) sendWrap.style.display = "block";'
+            f'    function getCookie(n) {{'
+            f'      const v = document.cookie.match("(^|;) ?" + n + "=([^;]*)(;|$)");'
+            f'      return v ? v[2] : "";'
+            f'    }}'
+            f'    let checkTimer = null;'
+            f'    function runEmailCheck() {{'
+            f'      const email = (emailInput.value || "").trim();'
+            f'      if (!email) {{'
+            f'        statusEl.style.color = "#888";'
+            f'        statusEl.textContent = "Enter an email above to check if it is already in the database.";'
+            f'        return;'
+            f'      }}'
+            f'      statusEl.style.color = "#888";'
+            f'      statusEl.textContent = "Checking email...";'
+            f'      let url = checkUrl + "?email=" + encodeURIComponent(email);'
+            f'      if (creatorPk) url += "&exclude_pk=" + encodeURIComponent(creatorPk);'
+            f'      fetch(url, {{ credentials: "same-origin" }})'
+            f'        .then(r => r.json())'
+            f'        .then(data => {{'
+            f'          if (data.exists) {{'
+            f'            statusEl.style.color = "#dc3545";'
+            f'            statusEl.innerHTML = "Already exists: <strong>" + data.creator.name + "</strong> "'
+            f'              + " (status: " + data.creator.status + ") - "'
+            f'              + "<a href=\\"" + data.edit_url + "\\">open existing record</a>";'
+            f'          }} else {{'
+            f'            statusEl.style.color = "#28a745";'
+            f'            statusEl.textContent = "Email is available - not in the database yet.";'
+            f'          }}'
+            f'        }})'
+            f'        .catch(() => {{'
+            f'          statusEl.style.color = "#888";'
+            f'          statusEl.textContent = "Could not check email right now.";'
+            f'        }});'
+            f'    }}'
+            f'    function scheduleCheck() {{'
+            f'      clearTimeout(checkTimer);'
+            f'      checkTimer = setTimeout(runEmailCheck, 400);'
+            f'    }}'
+            f'    emailInput.addEventListener("input", scheduleCheck);'
+            f'    emailInput.addEventListener("blur", runEmailCheck);'
+            f'    if (emailInput.value.trim()) runEmailCheck();'
+            f'    if (sendBtn && sendUrl) {{'
+            f'      sendBtn.addEventListener("click", function() {{'
+            f'        sendBtn.disabled = true;'
+            f'        sendRes.style.color = "#888";'
+            f'        sendRes.textContent = "Sending...";'
+            f'        fetch(sendUrl, {{'
+            f'          method: "POST",'
+            f'          headers: {{'
+            f'            "Content-Type": "application/x-www-form-urlencoded",'
+            f'            "X-CSRFToken": getCookie("csrftoken"),'
+            f'          }},'
+            f'          body: "",'
+            f'        }})'
+            f'        .then(r => r.json().then(data => ({{ ok: r.ok, data }})))'
+            f'        .then(({{ ok, data }}) => {{'
+            f'          sendBtn.disabled = false;'
+            f'          if (ok && data.success) {{'
+            f'            sendRes.style.color = "#28a745";'
+            f'            sendRes.textContent = "Sent to " + data.email;'
+            f'          }} else {{'
+            f'            sendRes.style.color = "#dc3545";'
+            f'            sendRes.textContent = data.error || "Send failed";'
+            f'          }}'
+            f'        }})'
+            f'        .catch(e => {{'
+            f'          sendBtn.disabled = false;'
+            f'          sendRes.style.color = "#dc3545";'
+            f'          sendRes.textContent = "Network error: " + e;'
+            f'        }});'
+            f'      }});'
+            f'    }}'
+            f'  }}'
+            f'  if (document.readyState === "loading") {{'
+            f'    document.addEventListener("DOMContentLoaded", initCreatorOutreachTools);'
+            f'  }} else {{'
+            f'    initCreatorOutreachTools();'
+            f'  }}'
+            f'}})();'
+            f'</script>'
+        )
+
+
+class CreatorAdminForm(forms.ModelForm):
+    milani_outreach_tools = forms.CharField(
+        required=False,
+        label='',
+        widget=MilaniOutreachToolsWidget(),
+    )
+
+    class Meta:
+        model = Creator
+        fields = '__all__'
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if not email:
+            return email
+        qs = Creator.objects.filter(email__iexact=email)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        existing = qs.first()
+        if existing:
+            raise forms.ValidationError(
+                f'This email is already registered for {existing.name} '
+                f'(status: {existing.status}). '
+                f'Open the existing creator record instead of creating a duplicate.'
+            )
+        return email
+
+
 @admin.register(Creator)
 class CreatorAdmin(admin.ModelAdmin):
+    form = CreatorAdminForm
     list_display = ('name', 'email', 'colored_status', 'last_outreach', 'country', 'preview_and_send')
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
     actions = [send_individual_outreach, queue_bulk_outreach]
     list_per_page = 50
 
-    # --- 4. COLOR-CODING METHOD (Your second idea) ---
+    fieldsets = (
+        (None, {
+            'fields': (
+                'name', 'email', 'country', 'portfolio_link',
+                'status', 'last_outreach',
+            ),
+        }),
+        ('Milani Outreach', {
+            'description': (
+                'Check for duplicate emails before saving. '
+                'Send outreach from this page without returning to the list.'
+            ),
+            'fields': ('milani_outreach_tools',),
+        }),
+    )
+
     @admin.display(description='Status', ordering='status')
     def colored_status(self, obj):
         if obj.status == 'New Lead':
@@ -867,9 +1032,9 @@ class CreatorAdmin(admin.ModelAdmin):
             color = 'red'
             text = obj.status.upper()
         else:
-            color = 'inherit' # Default text color
+            color = 'inherit'
             text = obj.status.upper()
-            
+
         return format_html('<b style="color: {};">{}</b>', color, text)
 
     @admin.display(description='Preview / Send')
@@ -885,6 +1050,85 @@ class CreatorAdmin(admin.ModelAdmin):
             '&#128065; Preview &amp; Send</a>',
             first.pk, obj.pk
         )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        should_send = bool(request.POST.get('_save_and_send'))
+        if should_send:
+            ok = send_milani_outreach_email(obj)
+            request._milani_outreach_send_result = ok
+            request._milani_outreach_send_email = obj.email
+
+    def _message_outreach_send_result(self, request):
+        if not hasattr(request, '_milani_outreach_send_result'):
+            return
+        email = getattr(request, '_milani_outreach_send_email', '')
+        if request._milani_outreach_send_result:
+            self.message_user(request, f'Milani outreach sent to {email}.')
+        else:
+            self.message_user(
+                request,
+                f'Creator saved but outreach send failed for {email}. Check app logs.',
+                level='ERROR',
+            )
+
+    def response_add(self, request, obj, post_url_continue=None):
+        self._message_outreach_send_result(request)
+        return super().response_add(request, obj, post_url_continue)
+
+    def response_change(self, request, obj):
+        self._message_outreach_send_result(request)
+        return super().response_change(request, obj)
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom = [
+            url_path(
+                'check-email/',
+                self.admin_site.admin_view(self.check_email_view),
+                name='creator_check_email',
+            ),
+            url_path(
+                '<int:creator_id>/send-outreach/',
+                self.admin_site.admin_view(self.send_outreach_view),
+                name='creator_send_outreach',
+            ),
+        ]
+        return custom + urls
+
+    def check_email_view(self, request):
+        email = (request.GET.get('email') or '').strip()
+        if not email:
+            return JsonResponse({'exists': False})
+        qs = Creator.objects.filter(email__iexact=email)
+        exclude_pk = (request.GET.get('exclude_pk') or '').strip()
+        if exclude_pk.isdigit():
+            qs = qs.exclude(pk=int(exclude_pk))
+        creator = qs.first()
+        if not creator:
+            return JsonResponse({'exists': False})
+        return JsonResponse({
+            'exists': True,
+            'creator': {
+                'id': creator.pk,
+                'name': creator.name,
+                'email': creator.email,
+                'status': creator.status,
+            },
+            'edit_url': f'/admin/api/creator/{creator.pk}/change/',
+        })
+
+    def send_outreach_view(self, request, creator_id):
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+        creator = get_object_or_404(Creator, pk=creator_id)
+        ok = send_milani_outreach_email(creator)
+        if ok:
+            return JsonResponse({'success': True, 'email': creator.email})
+        return JsonResponse({
+            'success': False,
+            'error': 'Send failed — check app logs and Resend API key in Site Settings.',
+        })
 
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
