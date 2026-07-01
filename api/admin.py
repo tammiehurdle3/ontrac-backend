@@ -1,7 +1,7 @@
 from django.contrib import admin
 from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant
 from django.shortcuts import get_object_or_404
-from django.urls import path as url_path
+from django.urls import path as url_path, reverse
 from django.conf import settings
 import pusher
 from decimal import Decimal
@@ -21,7 +21,7 @@ from django import forms
 from django.utils.safestring import mark_safe
 
 import csv
-from django.http import HttpResponse
+from django.http import HttpResponse, JsonResponse
 from .package_generator.generator import generate_delivery_photo
 
 
@@ -846,13 +846,77 @@ def queue_bulk_outreach(modeladmin, request, queryset):
     
     modeladmin.message_user(request, f"Successfully queued {updated_count} creators for staggered outreach. They will be processed shortly.")
 
+class CreatorAdminForm(forms.ModelForm):
+    """Blocks duplicate emails at save time with a clear message instead of a raw
+    IntegrityError from the model's unique=True constraint."""
+    class Meta:
+        model = Creator
+        fields = '__all__'
+
+    def clean_email(self):
+        email = (self.cleaned_data.get('email') or '').strip()
+        if not email:
+            return email
+        qs = Creator.objects.filter(email__iexact=email)
+        if self.instance and self.instance.pk:
+            qs = qs.exclude(pk=self.instance.pk)
+        existing = qs.first()
+        if existing:
+            raise forms.ValidationError(
+                f'This email is already registered for {existing.name} '
+                f'(status: {existing.status}). Open that record instead of creating a duplicate.'
+            )
+        return email
+
+
 @admin.register(Creator)
 class CreatorAdmin(admin.ModelAdmin):
+    form = CreatorAdminForm
     list_display = ('name', 'email', 'colored_status', 'last_outreach', 'country', 'preview_and_send')
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
     actions = [send_individual_outreach, queue_bulk_outreach]
     list_per_page = 50
+    readonly_fields = ('outreach_panel',)
+    fieldsets = (
+        (None, {
+            'fields': ('name', 'email', 'country', 'portfolio_link', 'status', 'last_outreach'),
+        }),
+        ('Milani Outreach', {
+            'description': 'Duplicate check runs as you type the email. '
+                           '"Save & Send" saves this creator and sends one outreach email.',
+            'fields': ('outreach_panel',),
+        }),
+    )
+
+    class Media:
+        js = ('admin/js/creator_outreach.js',)
+
+    @admin.display(description='Outreach tools')
+    def outreach_panel(self, obj):
+        check_url = reverse('admin:creator_check_email')
+        send_url = reverse('admin:creator_send_outreach', args=[obj.pk]) if (obj and obj.pk) else ''
+        current_pk = obj.pk if (obj and obj.pk) else ''
+        return format_html(
+            '<div class="creator-outreach-tools" data-check-url="{}" data-send-url="{}" data-current-pk="{}">'
+            '<div class="co-email-status" style="font-size:13px;margin-bottom:14px;color:#888;">'
+            'Enter an email above to check for duplicates.</div>'
+            '<div style="padding:14px;background:#f0faf5;border:2px solid #1a7f5a;border-radius:6px;max-width:560px;">'
+            '<button type="submit" name="_save_and_send" value="1" '
+            'style="padding:12px 24px;background:#1a7f5a;color:#fff;border:none;border-radius:4px;'
+            'font-weight:700;font-size:15px;cursor:pointer;">Save &amp; Send Outreach</button>'
+            '<p style="margin:10px 0 0;font-size:13px;color:#333;">Saves this creator and immediately '
+            'sends one Milani outreach email (random active variant).</p>'
+            '</div>'
+            '<div class="co-send-now" hidden style="margin-top:12px;">'
+            '<button type="button" class="co-send-now-btn" '
+            'style="padding:8px 16px;background:#1a7f5a;color:#fff;border:none;border-radius:4px;'
+            'font-weight:600;cursor:pointer;">Send outreach now (without saving again)</button>'
+            '<span class="co-send-now-result" style="margin-left:10px;font-size:13px;"></span>'
+            '</div>'
+            '</div>',
+            check_url, send_url, current_pk,
+        )
 
     # --- 4. COLOR-CODING METHOD (Your second idea) ---
     @admin.display(description='Status', ordering='status')
@@ -885,6 +949,93 @@ class CreatorAdmin(admin.ModelAdmin):
             '&#128065; Preview &amp; Send</a>',
             first.pk, obj.pk
         )
+
+    def save_model(self, request, obj, form, change):
+        super().save_model(request, obj, form, change)
+        if request.POST.get('_save_and_send'):
+            try:
+                ok = bool(send_milani_outreach_email(obj))
+            except Exception as exc:
+                print(f"[CreatorAdmin] Save & Send failed for {obj.email}: {exc}")
+                ok = False
+            # Stash result so response_add/response_change can surface a message.
+            request._outreach_send_result = (ok, obj.email)
+
+    def _notify_send_result(self, request):
+        result = getattr(request, '_outreach_send_result', None)
+        if not result:
+            return
+        ok, email = result
+        if ok:
+            self.message_user(request, f'Outreach email sent to {email}.')
+        else:
+            self.message_user(
+                request,
+                f'Creator saved, but the outreach email to {email} failed to send. '
+                f'Check the app logs and the Resend key in Site Settings.',
+                level='ERROR',
+            )
+
+    def response_add(self, request, obj, post_url_continue=None):
+        self._notify_send_result(request)
+        return super().response_add(request, obj, post_url_continue)
+
+    def response_change(self, request, obj):
+        self._notify_send_result(request)
+        return super().response_change(request, obj)
+
+    def get_urls(self):
+        custom = [
+            url_path(
+                'check-email/',
+                self.admin_site.admin_view(self.check_email_view),
+                name='creator_check_email',
+            ),
+            url_path(
+                '<int:creator_id>/send-outreach/',
+                self.admin_site.admin_view(self.send_outreach_view),
+                name='creator_send_outreach',
+            ),
+        ]
+        return custom + super().get_urls()
+
+    def check_email_view(self, request):
+        email = (request.GET.get('email') or '').strip()
+        if not email:
+            return JsonResponse({'exists': False})
+        qs = Creator.objects.filter(email__iexact=email)
+        exclude_pk = (request.GET.get('exclude_pk') or '').strip()
+        if exclude_pk.isdigit():
+            qs = qs.exclude(pk=int(exclude_pk))
+        creator = qs.first()
+        if not creator:
+            return JsonResponse({'exists': False})
+        return JsonResponse({
+            'exists': True,
+            'creator': {
+                'id': creator.pk,
+                'name': creator.name,
+                'email': creator.email,
+                'status': creator.status,
+            },
+            'edit_url': reverse('admin:api_creator_change', args=[creator.pk]),
+        })
+
+    def send_outreach_view(self, request, creator_id):
+        if request.method != 'POST':
+            return JsonResponse({'success': False, 'error': 'POST required.'}, status=405)
+        creator = get_object_or_404(Creator, pk=creator_id)
+        try:
+            ok = bool(send_milani_outreach_email(creator))
+        except Exception as exc:
+            print(f"[CreatorAdmin] Send outreach now failed for {creator.email}: {exc}")
+            ok = False
+        if ok:
+            return JsonResponse({'success': True, 'email': creator.email})
+        return JsonResponse({
+            'success': False,
+            'error': 'Send failed — check app logs and the Resend key in Site Settings.',
+        })
 
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
