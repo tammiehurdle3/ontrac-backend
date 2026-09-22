@@ -38,6 +38,8 @@ import uuid
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .shieldclimb_service import ShieldClimbService
+from .bachs_service import BachsService
+from .exchange_rate_service import ExchangeRateService
 from decimal import Decimal
 import urllib.parse
 import logging
@@ -92,28 +94,8 @@ def api_root(request, format=None):
 
 
 def convert_to_usd(amount, currency):
-    """Converts a given amount from its currency to USD."""
-    if currency.upper() == 'USD':
-        return amount
-
-    try:
-        api_key = settings.EXCHANGE_RATE_API_KEY
-        if not api_key:
-            print("WARNING: EXCHANGE_RATE_API_KEY is missing. USD conversion failed.")
-            return None
-
-        url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{currency.upper()}"
-        response = requests.get(url, timeout=5)
-        response.raise_for_status()
-        data = response.json()
-        usd_rate = data.get('conversion_rates', {}).get('USD')
-
-        if usd_rate:
-            return float(amount) * usd_rate
-    except (requests.RequestException, ValueError, TypeError) as e:
-        print(f"Currency conversion API error during refund calculation: {e}")
-        return None
-    return None
+    """Convert a fiat amount to USD using the shared cached FX service."""
+    return ExchangeRateService.convert_to_usd(amount, currency)
 
 
 @csrf_exempt
@@ -838,6 +820,225 @@ def bcon_webhook(request):
         return HttpResponse("Webhook Active", status=200)
 
     return HttpResponse(status=405)
+
+
+# ============================================================================
+# BACHS PAYMENT INTEGRATION VIEWS
+# ============================================================================
+
+@api_view(['POST'])
+def initiate_bachs_session(request, tracking_id):
+    """Create a Bachs hosted checkout session for one shipment."""
+    try:
+        shipment = Shipment.objects.get(trackingId=tracking_id)
+
+        if not shipment.requiresPayment or shipment.paymentAmount <= 0:
+            return Response(
+                {'error': 'Payment is not required for this shipment.'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        checkout_amount = ExchangeRateService.convert_to_usd_cents(
+            shipment.paymentAmount,
+            shipment.paymentCurrency,
+        )
+        if checkout_amount is None:
+            return Response(
+                {'error': 'Unable to prepare card checkout right now. Please try another payment method.'},
+                status=status.HTTP_503_SERVICE_UNAVAILABLE
+            )
+
+        frontend_url = settings.BACHS_FRONTEND_URL.rstrip('/')
+        session = BachsService.create_checkout_session(
+            amount=checkout_amount,
+            currency='USD',
+            tracking_id=shipment.trackingId,
+            shipment_id=shipment.id,
+            success_url=f"{frontend_url}/checkout/{shipment.trackingId}?bachs_return=success",
+            cancel_url=f"{frontend_url}/checkout/{shipment.trackingId}?bachs_return=cancelled",
+            customer_email=shipment.recipient_email,
+            customer_name=shipment.recipient_name,
+            payment_description=shipment.paymentDescription,
+            payment_method_types=['USD_CARD'],
+            original_amount=shipment.paymentAmount,
+            original_currency=shipment.paymentCurrency,
+        )
+
+        return Response({
+            'success': True,
+            'checkout_url': session['checkout_url'],
+            'checkout_id': session.get('checkout_id'),
+            'status': session.get('status'),
+        }, status=status.HTTP_200_OK)
+
+    except Shipment.DoesNotExist:
+        return Response({'error': 'Shipment not found'}, status=status.HTTP_404_NOT_FOUND)
+    except Exception as e:
+        logger.error(f"Error initiating Bachs session for {tracking_id}: {str(e)}")
+        return Response(
+            {'error': 'Unable to initialize Bachs checkout. Please try again.'},
+            status=status.HTTP_502_BAD_GATEWAY
+        )
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def bachs_webhook(request):
+    """Verify and process Bachs collection.succeeded events."""
+    raw_body = request.body
+    signature = request.headers.get('X-Bachs-Signature-V2', '')
+    secret = settings.BACHS_WEBHOOK_SECRET
+
+    if not secret:
+        logger.error("Bachs webhook received but BACHS_WEBHOOK_SECRET is not configured")
+        return JsonResponse({'error': 'Webhook not configured'}, status=503)
+
+    if not BachsService.verify_webhook_signature_v2(signature, raw_body, secret):
+        logger.warning("Rejected Bachs webhook with invalid signature")
+        return JsonResponse({'error': 'Invalid signature'}, status=401)
+
+    try:
+        event = json.loads(raw_body.decode('utf-8'))
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    event_id = event.get('id')
+    cache_key = f"bachs_webhook_{event_id}" if event_id else None
+    try:
+        if cache_key and cache.get(cache_key):
+            return JsonResponse({'status': 'duplicate'}, status=200)
+    except Exception:
+        pass
+
+    event_type = event.get('type')
+    supported_event_types = {
+        'collection.succeeded',
+        'collection.failed',
+        'collection.underpaid',
+        'checkout.expired',
+    }
+    if event_type not in supported_event_types:
+        return JsonResponse({'status': 'ignored'}, status=200)
+
+    data = event.get('data') or {}
+    metadata = data.get('metadata') or {}
+    tracking_id = metadata.get('tracking_id')
+    if not tracking_id:
+        logger.warning(f"Ignoring Bachs {event_type} event without OnTrac tracking metadata")
+        return JsonResponse({'status': 'ignored'}, status=200)
+
+    try:
+        shipment = Shipment.objects.get(trackingId=tracking_id)
+    except Shipment.DoesNotExist:
+        logger.warning(f"Ignoring Bachs event for unknown shipment {tracking_id}")
+        return JsonResponse({'status': 'ignored'}, status=200)
+
+    metadata_shipment_id = str(metadata.get('shipment_id') or '')
+    reference = str(data.get('reference') or '')
+    if metadata_shipment_id and metadata_shipment_id != str(shipment.id):
+        logger.warning(f"Ignoring Bachs event with shipment ID mismatch for {tracking_id}")
+        return JsonResponse({'status': 'ignored'}, status=200)
+    if reference and not reference.startswith(f"ontrac_{tracking_id}_"):
+        logger.warning(f"Ignoring Bachs event with reference mismatch for {tracking_id}")
+        return JsonResponse({'status': 'ignored'}, status=200)
+
+    expected_amount = metadata.get('expected_amount')
+    expected_currency = str(metadata.get('expected_currency') or '').upper()
+    original_amount = metadata.get('original_amount', expected_amount)
+    original_currency = str(metadata.get('original_currency') or expected_currency).upper()
+
+    if original_amount:
+        try:
+            if Decimal(str(original_amount)) != shipment.paymentAmount:
+                logger.warning(f"Ignoring Bachs event with original amount mismatch for {tracking_id}")
+                return JsonResponse({'status': 'ignored'}, status=200)
+        except Exception:
+            logger.warning(f"Ignoring Bachs event with invalid original amount metadata for {tracking_id}")
+            return JsonResponse({'status': 'ignored'}, status=200)
+    if original_currency and original_currency != shipment.paymentCurrency.upper():
+        logger.warning(f"Ignoring Bachs event with original currency mismatch for {tracking_id}")
+        return JsonResponse({'status': 'ignored'}, status=200)
+
+    if event_type != 'collection.succeeded':
+        if event_type == 'collection.underpaid':
+            logger.warning(
+                f"Bachs underpaid collection for {tracking_id}; "
+                f"expected={expected_amount} {expected_currency or 'USD'} "
+                f"received={data.get('amount')} {str(data.get('currency') or '').upper() or 'UNKNOWN'}"
+            )
+        elif event_type == 'collection.failed':
+            logger.info(
+                f"Bachs collection failed for {tracking_id}; "
+                f"checkout={data.get('checkout_id')} charge={data.get('charge_id')}"
+            )
+        else:
+            logger.info(
+                f"Bachs checkout expired for {tracking_id}; "
+                f"checkout={data.get('checkout_id') or data.get('id')}"
+            )
+
+        try:
+            if cache_key:
+                cache.set(cache_key, True, timeout=86400)
+        except Exception:
+            pass
+
+        return JsonResponse({
+            'status': 'recorded',
+            'event': event_type,
+            'tracking_id': tracking_id,
+        }, status=200)
+
+    charged_currency = str(data.get('currency') or '').upper()
+    charged_amount = data.get('amount')
+    if expected_currency and charged_currency and charged_currency != expected_currency:
+        logger.warning(f"Ignoring Bachs event with charged currency mismatch for {tracking_id}")
+        return JsonResponse({'status': 'ignored'}, status=200)
+    if expected_amount and charged_amount is not None:
+        try:
+            if Decimal(str(charged_amount)) < Decimal(str(expected_amount)):
+                logger.warning(f"Ignoring Bachs event with insufficient charged amount for {tracking_id}")
+                return JsonResponse({'status': 'ignored'}, status=200)
+        except Exception:
+            logger.warning(f"Ignoring Bachs event with invalid charged amount for {tracking_id}")
+            return JsonResponse({'status': 'ignored'}, status=200)
+
+    if not shipment.requiresPayment:
+        return JsonResponse({'status': 'duplicate', 'tracking_id': tracking_id}, status=200)
+
+    shipment.status = 'Payment Confirmed'
+    shipment.requiresPayment = False
+    shipment.save(update_fields=['status', 'requiresPayment'])
+
+    receipt, receipt_created = Receipt.objects.get_or_create(shipment=shipment)
+    if not receipt.is_visible:
+        receipt.is_visible = True
+        if not receipt_created:
+            receipt.generated_at = timezone.now()
+            receipt.save(update_fields=['is_visible', 'generated_at'])
+        else:
+            receipt.save(update_fields=['is_visible'])
+
+    try:
+        pusher_client.trigger(
+            f'shipment-{tracking_id}',
+            'update',
+            {'status': 'Payment Confirmed', 'message': 'Your payment has been verified.'}
+        )
+    except Exception as pusher_error:
+        logger.warning(f"Bachs Pusher notification failed: {str(pusher_error)}")
+
+    try:
+        if cache_key:
+            cache.set(cache_key, True, timeout=86400)
+    except Exception:
+        pass
+
+    logger.info(
+        f"Bachs payment confirmed for {tracking_id}; "
+        f"checkout={data.get('checkout_id')} charge={data.get('charge_id')}"
+    )
+    return JsonResponse({'status': 'success', 'tracking_id': tracking_id}, status=200)
 
 
 # ============================================================================
