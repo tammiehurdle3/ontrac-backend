@@ -1,7 +1,6 @@
 from rest_framework import serializers
 from .models import Shipment, Payment, Voucher, Receipt, RefundBalance  # NEW: Added Voucher, Receipt
-from django.conf import settings
-import requests
+from .exchange_rate_service import ExchangeRateService
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
@@ -81,27 +80,18 @@ class ShipmentSerializer(serializers.ModelSerializer):
         return receipt.is_visible if receipt else False
         
     def get_approximatedUSD(self, obj):
-        # This is the currency conversion logic
-        # It requires a 'paymentCurrency' field on your Shipment model
         if not hasattr(obj, 'paymentCurrency'):
             return None
 
         base_currency = obj.paymentCurrency.upper()
         if base_currency == 'USD' or not obj.paymentAmount:
             return None
-        try:
-            api_key = settings.EXCHANGE_RATE_API_KEY
-            url = f"https://v6.exchangerate-api.com/v6/{api_key}/latest/{base_currency}"
-            response = requests.get(url, timeout=5)
-            response.raise_for_status()
-            data = response.json()
-            usd_rate = data.get('conversion_rates', {}).get('USD')
-            if usd_rate:
-                converted_amount = float(obj.paymentAmount) * usd_rate
-                return {"amount": f"{converted_amount:.2f}", "currency": "USD"}
-        except requests.RequestException as e:
-            print(f"Currency conversion API error: {e}")
-        return None
+
+        converted_amount = ExchangeRateService.convert_to_usd_cents(obj.paymentAmount, base_currency)
+        if converted_amount is None:
+            return None
+
+        return {"amount": f"{converted_amount:.2f}", "currency": "USD"}
         
     def get_paymentBreakdown(self, obj):
         # This is the flexible summary logic

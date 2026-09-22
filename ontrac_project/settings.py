@@ -26,7 +26,7 @@ DEBUG = env.bool('DEBUG', default=(ENVIRONMENT == 'local'))
 # These will print to your Render logs so we can see what's happening.
 print("--- STARTING DEPLOYMENT LOG ---")
 print(f"[*] Environment detected: {ENVIRONMENT}")
-print(f"[*] DATABASE_URL found: {env('DATABASE_URL', default='NOT FOUND')}")
+print(f"[*] DATABASE_URL configured: {bool(env('DATABASE_URL', default=''))}")
 print("-----------------------------")
 # ------------------------------------
 
@@ -238,6 +238,15 @@ SHIELDCLIMB_THEME_COLOR = env(
     'SHIELDCLIMB_THEME_COLOR',
     default='#1778F2'  # Professional blue from your style.css
 )
+
+# ============================================================================
+# BACHS PAYMENT GATEWAY CONFIGURATION
+# Sandbox-first. Live later is an environment-variable swap only.
+# ============================================================================
+BACHS_API_KEY = env('BACHS_API_KEY', default='')
+BACHS_API_BASE_URL = env('BACHS_API_BASE_URL', default='https://sandbox-api.bachs.io')
+BACHS_WEBHOOK_SECRET = env('BACHS_WEBHOOK_SECRET', default='')
+BACHS_FRONTEND_URL = env('BACHS_FRONTEND_URL', default='http://localhost:5173')
 
 #EVENT AUTO LOCATION
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
