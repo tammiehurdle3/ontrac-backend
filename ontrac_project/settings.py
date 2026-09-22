@@ -26,7 +26,7 @@ DEBUG = env.bool('DEBUG', default=(ENVIRONMENT == 'local'))
 # These will print to your Render logs so we can see what's happening.
 print("--- STARTING DEPLOYMENT LOG ---")
 print(f"[*] Environment detected: {ENVIRONMENT}")
-print(f"[*] DATABASE_URL found: {env('DATABASE_URL', default='NOT FOUND')}")
+print(f"[*] DATABASE_URL configured: {bool(env('DATABASE_URL', default=''))}")
 print("-----------------------------")
 # ------------------------------------
 
