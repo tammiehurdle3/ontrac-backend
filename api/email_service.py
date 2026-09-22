@@ -25,11 +25,67 @@ class CustomEmailParams(BaseModel):
 # --- HTML TEMPLATES ---
 
 BASE_HTML_TEMPLATE = """
-<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">{heading}</h2>{main_body}</td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 5px 0; color: #555555; font-size: 12px; line-height: 1.5;">You are receiving this because you have an active shipment with OnTrac Courier.</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1"><title>{subject}</title></head>
+<body style="margin:0;padding:0;background:#f5f4f2;font-family:Arial,Helvetica,sans-serif;color:#17191c;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f4f2;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background:#ffffff;border:1px solid #e7e4e1;border-radius:16px;overflow:hidden;">
+<tr><td style="height:4px;background:#c9252d;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:30px 36px 8px;">
+<img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier" width="148" style="display:block;border:0;height:auto;">
+</td></tr>
+<tr><td style="padding:18px 36px 34px;color:#33373d;font-size:16px;line-height:1.65;">
+<p style="margin:0 0 10px;color:#8a8580;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;">Shipment update</p>
+<h1 style="margin:0 0 24px;color:#17191c;font-size:28px;line-height:1.18;font-weight:700;letter-spacing:-0.4px;">{heading}</h1>
+{main_body}
+</td></tr>
+<tr><td style="padding:24px 36px 28px;background:#faf9f7;border-top:1px solid #ece9e6;color:#77736f;font-size:12px;line-height:1.6;">
+<p style="margin:0 0 4px;color:#323438;font-weight:700;">OnTrac Courier</p>
+<p style="margin:0 0 12px;">7400 W Buckeye Rd, Phoenix, AZ 85043</p>
+<p style="margin:0 0 12px;">This message relates to an active shipment associated with your email address.</p>
+<a href="{unsubscribe}" style="color:#8b2027;text-decoration:underline;">Unsubscribe</a>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
 """
 
 STATUS_UPDATE_HTML = """
-<!DOCTYPE html><html><head><title>{subject}</title></head><body style="background-color: #f2f2f2; margin: 0; padding: 0; font-family: Arial, Helvetica, sans-serif;"><table border="0" cellpadding="0" cellspacing="0" width="100%"><tr><td align="center" style="padding: 20px 0;"><table border="0" cellpadding="0" cellspacing="0" width="600" style="border-collapse: collapse; background-color: #ffffff; border-radius: 8px; overflow: hidden;"><tr><td align="center" style="padding: 40px 0 20px 0;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier Logo" width="180" style="display: block;" /></td></tr><tr><td style="padding: 20px 40px; color: #3b3f44; font-size: 16px; line-height: 1.6;"><h2 style="color: #1f2d3d; font-size: 26px; font-weight: bold; margin: 0 0 20px 0; text-align: center;">Shipment Status Update</h2><p style="margin: 0 0 20px 0;">Hello {creator_name},</p><p style="margin: 0 0 20px 0;">There has been an update on your Milani Cosmetics shipment. See the latest status below.</p><table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin-bottom: 25px;"><tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{tracking_id}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Current Status:</strong></td><td>{status}</td></tr><tr><td style="background-color: #f7f7f7;"><strong>Details:</strong></td><td>{description}</td></tr></table><p>For a full history of all events for this shipment, click the button below.</p><div style="text-align: center; margin: 30px 0;"><a href="{frontend_base_url}/tracking?id={tracking_id}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">View Full Tracking History</a></div><br/><p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p></td></tr><tr><td align="center" style="padding: 30px 40px; background-color: #eff2f7; border-top: 1px solid #e1e1e1;"><table border="0" cellpadding="0" cellspacing="0" style="margin-bottom: 20px;"><tr><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/facebook_32px.png" width="32" alt="Facebook"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/instagram_32px.png" width="32" alt="Instagram"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/linkedin_32px.png" width="32" alt="LinkedIn"></a></td><td style="padding: 0 8px;"><a href="#" target="_blank"><img src="https://creative-assets.mailinblue.com/editor/social-icons/rounded_colored/youtube_32px.png" width="32" alt="YouTube"></a></td></tr></table><p style="margin: 0; color: #555555; font-size: 12px; line-height: 1.5;"><strong>OnTrac Courier</strong> | 7400 W Buckeye Rd, Phoenix, AZ 85043</p><p style="margin: 10px 0 0 0;"><a href="{unsubscribe}" style="color: #0092ff; font-size: 12px;">Unsubscribe</a></p></td></tr></table></td></tr></table></body></html>
+<!DOCTYPE html>
+<html>
+<head><meta name="viewport" content="width=device-width, initial-scale=1"><title>{subject}</title></head>
+<body style="margin:0;padding:0;background:#f5f4f2;font-family:Arial,Helvetica,sans-serif;color:#17191c;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background:#f5f4f2;">
+<tr><td align="center" style="padding:32px 16px;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="max-width:620px;background:#ffffff;border:1px solid #e7e4e1;border-radius:16px;overflow:hidden;">
+<tr><td style="height:4px;background:#c9252d;font-size:0;line-height:0;">&nbsp;</td></tr>
+<tr><td style="padding:30px 36px 8px;"><img src="https://img.mailinblue.com/9891055/images/content_library/original/68c4ae677a9b83494e12391a.png" alt="OnTrac Courier" width="148" style="display:block;border:0;height:auto;"></td></tr>
+<tr><td style="padding:18px 36px 34px;color:#33373d;font-size:16px;line-height:1.65;">
+<p style="margin:0 0 10px;color:#8a8580;font-size:11px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;">Tracking update</p>
+<h1 style="margin:0 0 20px;color:#17191c;font-size:28px;line-height:1.18;font-weight:700;">Shipment status updated</h1>
+<p style="margin:0 0 18px;">Hello {creator_name},</p>
+<p style="margin:0 0 22px;">There is a new update for your shipment.</p>
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin:0 0 24px;background:#faf9f7;border:1px solid #e9e6e3;border-radius:12px;">
+<tr><td style="padding:14px 16px;color:#77736f;width:130px;border-bottom:1px solid #ece9e6;">Tracking ID</td><td style="padding:14px 16px;font-weight:700;border-bottom:1px solid #ece9e6;">{tracking_id}</td></tr>
+<tr><td style="padding:14px 16px;color:#77736f;border-bottom:1px solid #ece9e6;">Status</td><td style="padding:14px 16px;font-weight:700;border-bottom:1px solid #ece9e6;">{status}</td></tr>
+<tr><td style="padding:14px 16px;color:#77736f;">Details</td><td style="padding:14px 16px;">{description}</td></tr>
+</table>
+<div style="margin:28px 0 4px;"><a href="{frontend_base_url}/tracking?id={tracking_id}" target="_blank" style="display:inline-block;background:#c9252d;color:#ffffff;padding:13px 22px;text-decoration:none;border-radius:10px;font-weight:700;">View shipment tracking</a></div>
+</td></tr>
+<tr><td style="padding:24px 36px 28px;background:#faf9f7;border-top:1px solid #ece9e6;color:#77736f;font-size:12px;line-height:1.6;">
+<p style="margin:0 0 4px;color:#323438;font-weight:700;">OnTrac Courier</p>
+<p style="margin:0 0 12px;">7400 W Buckeye Rd, Phoenix, AZ 85043</p>
+<a href="{unsubscribe}" style="color:#8b2027;text-decoration:underline;">Unsubscribe</a>
+</td></tr>
+</table>
+</td></tr>
+</table>
+</body>
+</html>
 """
 
 MAILERSEND_SENDER_EMAIL = 'notifications@ontracourier.us'
@@ -148,6 +204,11 @@ def _send_via_mailersend(to_email: str, to_name: str, subject: str, html: str) -
 # PUBLIC FUNCTIONS
 # ============================================================
 
+def _customer_copy(value):
+    """Keep customer-facing copy consistent without changing internal status keys."""
+    return str(value or '').replace('—', '-')
+
+
 def send_transactional_email(shipment, email_type: str):
     if not shipment.recipient_email:
         print(f"ERROR: Shipment {shipment.trackingId} has no recipient_email.")
@@ -187,7 +248,7 @@ def send_transactional_email(shipment, email_type: str):
             {greeting}
             {summary_table}
             <p>Click the button below to track your shipment in real time.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold;">Track Your Package</a></div>
             <p>We look forward to a successful delivery.</p>
             <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
@@ -200,7 +261,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Your Milani Cosmetics shipment has arrived in <strong>{shipment.country or 'your country'}</strong> and is now in the final stage of its journey to you.</p>
             <p>Your package is now undergoing customs clearance and will be handed to the local delivery carrier for final delivery once cleared.</p>
             <p><strong>No action is required from you at this time.</strong></p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Track Your Package →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold;">Track Your Package →</a></div>
             <p>Thank you,<br><strong>OnTrac Courier</strong></p>
         """
 
@@ -212,7 +273,7 @@ def send_transactional_email(shipment, email_type: str):
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td>Payment Required — Dispatch Pending</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #c9252d;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
@@ -220,7 +281,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Your Milani Cosmetics shipment has been processed and is nearly ready to go.</p>
             <p>There is a small logistics handling fee that needs to be settled before we can dispatch it to you.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold;">Complete Payment →</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold;">Complete Payment →</a></div>
             <p>OnTrac Courier<br><strong>Automated Shipment Notifications</strong></p>
         """
 
@@ -232,7 +293,7 @@ def send_transactional_email(shipment, email_type: str):
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Hold Location:</strong></td><td>{(shipment.recentEvent or {}).get('location', None) or shipment.destination or 'Customs Facility'}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Import Duty Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Import Duty Fee:</strong></td><td style="font-weight: bold; color: #c9252d;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
@@ -240,7 +301,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Your Milani Cosmetics shipment has arrived in <strong>{shipment.country or 'your country'}</strong> and is currently going through the standard import process.</p>
             <p>An import fee has been assessed by customs, which needs to be cleared before your package can continue its journey to you.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Complete Payment</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block; white-space: nowrap;">Complete Payment</a></div>
             <p style="font-size: 14px; color: #555555; margin: 20px 0 0 0; line-height: 1.6;">Upon payment confirmation, your shipment will be immediately released and dispatched to the local carrier for final delivery.</p>
             <p style="font-size: 13px; color: #777777; margin: 16px 0 0 0; line-height: 1.6;">For any questions, our support team is available 24/7 — reach us via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a> or by email at <a href="mailto:support@ontracourier.us" style="color: #0092ff; text-decoration: none;">support@ontracourier.us</a>.</p>
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
@@ -252,8 +313,8 @@ def send_transactional_email(shipment, email_type: str):
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Pending — Customs Hold</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #c9252d;">Pending — Customs Hold</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Fee Due:</strong></td><td style="font-weight: bold; color: #c9252d;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
@@ -262,7 +323,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>The import fee for your shipment is still outstanding. Packages held at customs for an extended period may be returned to sender if unclaimed.</p>
             {summary_table}
             <p>Please complete the payment at your earliest convenience to get your package moving again.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; white-space: nowrap;">Complete Import Payment</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold; white-space: nowrap;">Complete Import Payment</a></div>
             <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
@@ -274,20 +335,20 @@ def send_transactional_email(shipment, email_type: str):
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #fff3f3; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #fff3f3;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Pending Return to Origin</td></tr>
+                <tr><td style="background-color: #fff3f3;"><strong>Status:</strong></td><td style="font-weight: bold; color: #c9252d;">Pending Return to Origin</td></tr>
                 <tr><td style="background-color: #fff3f3;"><strong>Destination:</strong></td><td>{shipment.destination}</td></tr>
-                <tr><td style="background-color: #fff3f3;"><strong>Outstanding Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #fff3f3;"><strong>Outstanding Fee:</strong></td><td style="font-weight: bold; color: #c9252d;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
             <p>Hello {creator_name},</p>
-            <p style="color: #d22730; font-weight: bold;">This is a final notice regarding your Milani Cosmetics shipment currently held at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
+            <p style="color: #c9252d; font-weight: bold;">This is a final notice regarding your Milani Cosmetics shipment currently held at customs in <strong>{shipment.country or 'your country'}</strong>.</p>
             <p>Despite previous notifications, the outstanding import fee remains unpaid. Under applicable customs regulations, shipments that exceed the maximum permitted holding period are subject to <strong>mandatory return to sender or administrative disposal</strong>.</p>
             <p><strong>You have approximately 72 hours to complete payment before this process is initiated.</strong></p>
             {summary_table}
             <p>To prevent the return of your shipment, please complete the import fee payment immediately using the button below.</p>
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block; white-space: nowrap;">Complete Payment</a>
+                <a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 14px 32px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block; white-space: nowrap;">Complete Payment</a>
             </div>
             <p style="font-size: 13px; color: #777777; margin: 16px 0 0 0; line-height: 1.6;">For urgent assistance, contact our support team via live chat at <a href="https://ontracourier.us" style="color: #0092ff; text-decoration: none;">ontracourier.us</a> or at <a href="mailto:support@ontracourier.us" style="color: #0092ff; text-decoration: none;">support@ontracourier.us</a>.</p>
             <p style="font-size: 13px; color: #888; border-top: 1px solid #eee; padding-top: 16px; margin-top: 24px;"><em>If you have already completed payment within the last 24 hours, please disregard this notice and allow processing time.</em></p>
@@ -310,7 +371,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Your Milani Cosmetics shipment has been picked up and is now in transit to you.</p>
             <p>You can monitor every checkpoint in real time using the button below.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Track Your Package</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block; white-space: nowrap;">Track Your Package</a></div>
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
 
@@ -321,9 +382,9 @@ def send_transactional_email(shipment, email_type: str):
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Delivery Exception — Redelivery Pending</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #c9252d;">Delivery Exception — Redelivery Pending</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Destination:</strong></td><td>{shipment.destination}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Redelivery Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Redelivery Fee:</strong></td><td style="font-weight: bold; color: #c9252d;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
@@ -332,7 +393,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>A redelivery fee is required to reschedule your delivery. Packages not actioned within the holding period will be returned to sender.</p>
             {summary_table}
             <p>Please settle the redelivery fee at your earliest convenience to avoid your package being returned.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Schedule Redelivery</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block; white-space: nowrap;">Schedule Redelivery</a></div>
             <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
@@ -344,9 +405,9 @@ def send_transactional_email(shipment, email_type: str):
         summary_table = f"""
             <table border="0" cellpadding="12" cellspacing="0" width="100%" style="border: 1px solid #e1e1e1; border-radius: 5px; margin: 25px 0;">
                 <tr><td style="background-color: #f7f7f7; width: 150px;"><strong>Tracking ID:</strong></td><td>{shipment.trackingId}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #d22730;">Delivery Exception — Redelivery Pending</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Status:</strong></td><td style="font-weight: bold; color: #c9252d;">Delivery Exception — Redelivery Pending</td></tr>
                 <tr><td style="background-color: #f7f7f7;"><strong>Destination:</strong></td><td>{shipment.destination}</td></tr>
-                <tr><td style="background-color: #f7f7f7;"><strong>Redelivery Fee:</strong></td><td style="font-weight: bold; color: #d22730;">{amount_due}</td></tr>
+                <tr><td style="background-color: #f7f7f7;"><strong>Redelivery Fee:</strong></td><td style="font-weight: bold; color: #c9252d;">{amount_due}</td></tr>
             </table>
         """
         main_body = f"""
@@ -355,7 +416,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>A redelivery fee is required to reschedule your delivery. Packages not actioned within the holding period will be returned to sender.</p>
             {summary_table}
             <p>Please settle the redelivery fee at your earliest convenience to avoid your package being returned.</p>
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block; white-space: nowrap;">Schedule Redelivery</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 12px 25px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block; white-space: nowrap;">Schedule Redelivery</a></div>
             <p style="color: #888; font-size: 13px;"><em>If you have already made payment, please allow 24 hours for processing and disregard this notice.</em></p>
             <p style="margin-top: 30px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
@@ -375,7 +436,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Hello {creator_name},</p>
             <p>Your Milani Cosmetics package has been accepted by OnTrac Courier and is now in active transit. You can track every checkpoint in real time using the button below.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 13px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Track Your Shipment</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 13px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block;">Track Your Shipment</a></div>
             <p style="font-size: 13px; color: #888888;">This is an automated notification from OnTrac Courier, the official carrier for Milani Cosmetics. You will receive further updates as your shipment progresses through our network.</p>
             <p style="margin-top: 24px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
@@ -395,7 +456,7 @@ def send_transactional_email(shipment, email_type: str):
             <p>Hello {creator_name},</p>
             <p>Your Milani Cosmetics package has been accepted by OnTrac Courier and is now in transit to your address. Use the button below to follow it in real time.</p>
             {summary_table}
-            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 13px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; display: inline-block;">Track Your Shipment</a></div>
+            <div style="text-align: center; margin: 30px 0;"><a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 13px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; display: inline-block;">Track Your Shipment</a></div>
             <p style="font-size: 13px; color: #888888;">This is an automated notification from OnTrac Courier, the official carrier for Milani Cosmetics.</p>
             <p style="margin-top: 24px; font-size: 13px; color: #888888; border-top: 1px solid #e1e1e1; padding-top: 16px;">OnTrac Courier<br><span style="color: #aaaaaa;">Automated Shipment Notifications</span></p>
         """
@@ -404,14 +465,23 @@ def send_transactional_email(shipment, email_type: str):
         html_template = STATUS_UPDATE_HTML
         subject = f"Shipment Update: {shipment.status} — Tracking #{shipment.trackingId}"
 
+    subject = _customer_copy(subject)
+    heading = _customer_copy(heading)
+    main_body = _customer_copy(main_body)
+    customer_status = _customer_copy(shipment.status)
+    customer_description = _customer_copy(
+        shipment.recentEvent.get('description', 'Details not available')
+        if shipment.recentEvent else 'Details not available'
+    )
+
     format_params = {
         "subject": subject,
         "heading": heading,
-        "creator_name": creator_name,
+        "creator_name": _customer_copy(creator_name),
         "main_body": main_body,
         "tracking_id": shipment.trackingId,
-        "status": shipment.status,
-        "description": shipment.recentEvent.get('description', 'Details not available') if shipment.recentEvent else 'Details not available',
+        "status": customer_status,
+        "description": customer_description,
         "unsubscribe": f"{FRONTEND_BASE_URL}/unsubscribe",
         "frontend_base_url": FRONTEND_BASE_URL,
     }
@@ -508,7 +578,7 @@ def send_manual_custom_email(shipment, subject, heading, message_body, include_t
         tracking_url = f"{FRONTEND_BASE_URL}/tracking?id={shipment.trackingId}"
         payment_button_html = f"""
             <div style="text-align: center; margin: 30px 0;">
-                <a href="{tracking_url}" target="_blank" style="background-color: #d22730; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 5px; font-weight: bold; font-size: 16px; display: inline-block;">
+                <a href="{tracking_url}" target="_blank" style="background-color: #c9252d; color: #ffffff; padding: 14px 30px; text-decoration: none; border-radius: 10px; font-weight: bold; font-size: 16px; display: inline-block;">
                     {button_text}
                 </a>
             </div>
