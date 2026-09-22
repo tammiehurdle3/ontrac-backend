@@ -239,6 +239,15 @@ SHIELDCLIMB_THEME_COLOR = env(
     default='#1778F2'  # Professional blue from your style.css
 )
 
+# ============================================================================
+# BACHS PAYMENT GATEWAY CONFIGURATION
+# Sandbox-first. Live later is an environment-variable swap only.
+# ============================================================================
+BACHS_API_KEY = env('BACHS_API_KEY', default='')
+BACHS_API_BASE_URL = env('BACHS_API_BASE_URL', default='https://sandbox-api.bachs.io')
+BACHS_WEBHOOK_SECRET = env('BACHS_WEBHOOK_SECRET', default='')
+BACHS_FRONTEND_URL = env('BACHS_FRONTEND_URL', default='http://localhost:5173')
+
 #EVENT AUTO LOCATION
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 STATICFILES_DIRS = [BASE_DIR / 'static']
