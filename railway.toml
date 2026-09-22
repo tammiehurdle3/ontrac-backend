@@ -3,4 +3,5 @@ builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"
 
 [deploy]
+preDeployCommand = "python manage.py migrate --noinput"
 startCommand = "/bin/sh -c 'exec gunicorn ontrac_project.wsgi --timeout 120 --workers 2 --bind 0.0.0.0:${PORT:-8080}'"
