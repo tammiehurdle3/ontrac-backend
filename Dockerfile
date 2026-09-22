@@ -11,4 +11,12 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-CMD ["/bin/sh", "-c", "python manage.py migrate && python manage.py collectstatic --noinput && exec gunicorn ontrac_project.wsgi --timeout 120 --workers 2 --bind 0.0.0.0:${PORT:-8080}"]
+RUN ENVIRONMENT=local \
+    SECRET_KEY=build-only \
+    PUSHER_APP_ID=1 \
+    PUSHER_KEY=build-key \
+    PUSHER_SECRET=build-secret \
+    PUSHER_CLUSTER=mt1 \
+    python manage.py collectstatic --noinput
+
+CMD ["/bin/sh", "-c", "exec gunicorn ontrac_project.wsgi --timeout 120 --workers 2 --bind 0.0.0.0:${PORT:-8080}"]
