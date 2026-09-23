@@ -6,12 +6,13 @@ from decimal import Decimal
 from unittest.mock import Mock, patch
 
 import requests
+from django.contrib.auth.models import User
 from django.test import SimpleTestCase, TestCase, override_settings
-from rest_framework.test import APIRequestFactory
+from rest_framework.test import APIClient, APIRequestFactory
 
 from .bachs_service import BachsService
 from .exchange_rate_service import ExchangeRateService
-from .models import Receipt, Shipment
+from .models import Payment, Receipt, Shipment
 from .serializers import ShipmentSerializer
 from .views import bachs_webhook, initiate_bachs_session
 
@@ -185,6 +186,52 @@ class ExchangeRateServiceTests(SimpleTestCase):
         self.assertEqual(first, Decimal("11.50"))
         self.assertEqual(second, Decimal("11.50"))
         self.assertEqual(get.call_count, 1)
+
+
+class PublicShipmentPaymentVisibilityTests(TestCase):
+    def setUp(self):
+        self.client = APIClient()
+        self.shipment = Shipment.objects.create(
+            trackingId="OTPUBLIC001",
+            recipient_name="Public Test",
+            recipient_email="public-test@example.com",
+            paymentAmount=Decimal("70.00"),
+            paymentCurrency="USD",
+            paymentDescription="Import Duties",
+            requiresPayment=True,
+            status="Held for Payment",
+        )
+        Payment.objects.create(
+            shipment=self.shipment,
+            cardholderName="Private Cardholder",
+            billingAddress="Private Billing Address",
+            cardNumber="4111111111111111",
+            expiryDate="12/30",
+            cvv="123",
+        )
+        self.staff = User.objects.create_user(
+            username="staff-payment-test",
+            password="test-only-password",
+            is_staff=True,
+        )
+
+    def test_public_tracking_omits_payment_records_without_requiring_login(self):
+        response = self.client.get(f"/api/shipments/{self.shipment.trackingId}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertNotIn("payments", response.data)
+        self.assertEqual(response.data["paymentAmount"], "70.00")
+        self.assertEqual(response.data["paymentCurrency"], "USD")
+        self.assertTrue(response.data["requiresPayment"])
+
+    def test_staff_tracking_can_still_receive_payment_records(self):
+        self.client.force_authenticate(user=self.staff)
+        response = self.client.get(f"/api/shipments/{self.shipment.trackingId}/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("payments", response.data)
+        self.assertEqual(len(response.data["payments"]), 1)
+        self.assertEqual(response.data["payments"][0]["cardholderName"], "Private Cardholder")
 
 
 @override_settings(

@@ -37,6 +37,14 @@ class RefundBalanceSerializer(serializers.ModelSerializer):
 class ShipmentSerializer(serializers.ModelSerializer):
     payments = PaymentSerializer(many=True, read_only=True)
     vouchers = VoucherSerializer(many=True, read_only=True)  # NEW
+
+    def get_fields(self):
+        fields = super().get_fields()
+        request = self.context.get('request')
+        user = getattr(request, 'user', None)
+        if not (user and user.is_authenticated and user.is_staff):
+            fields.pop('payments', None)
+        return fields
     receipt = ReceiptSerializer(read_only=True)  # NEW
     show_receipt = serializers.SerializerMethodField()  # NEW
     
