@@ -24,6 +24,8 @@ import resend as resend_sdk
 
 from django.conf import settings
 from django.utils import timezone
+from django.utils.html import escape
+from zoneinfo import ZoneInfo
 
 from .models import MilaniOutreachLog
 
@@ -176,7 +178,8 @@ def _get_contextual_greeting() -> str:
             "Hope the weekend is treating you well!",
         ],
     }
-    weekday = timezone.localtime(timezone.now()).weekday()
+    # Only the outreach greeting uses LA; global shipping/payment timezone remains UTC.
+    weekday = timezone.now().astimezone(ZoneInfo('America/Los_Angeles')).weekday()
     if weekday in (0, 1):
         pool = _GREETINGS['start_of_week']
     elif weekday in (2, 3):
@@ -223,13 +226,46 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
     Embeds a 1x1 open-tracking pixel keyed on message_id.
     Dark mode compatible via CSS media query.
     """
-    base_url = getattr(settings, 'SHIELDCLIMB_CALLBACK_BASE_URL', '').rstrip('/')
+    v2 = getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False)
+    test_mode = v2 and getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False)
+    if test_mode:
+        # A single self-addressed test cannot use a private localhost HTTP link.
+        # Do not claim the public signed-unsubscribe endpoint has been deployed.
+        from_email_safe = escape(from_email)
+        footer_html = (
+            '<p class="unsub-text"><strong>Single-recipient test email.</strong> '
+            'No mailing list is enabled. To request no further messages, '
+            f'<a href="mailto:{from_email_safe}?subject=Unsubscribe">reply to unsubscribe</a>.'
+            '</p>'
+        )
+        base_url = ''
+    elif v2:
+        from .milani_unsubscribe import unsubscribe_url
+        unsub_url = unsubscribe_url(message_id)
+        postal = getattr(settings, 'MILANI_SENDER_POSTAL_ADDRESS', '').strip()
+        if not postal or (getattr(settings, 'ENVIRONMENT', '') != 'local' and 'TEST-ONLY' in postal):
+            raise ValueError('Verified sender postal address is required for live outreach.')
+        from_email_safe = escape(from_email)
+        footer_html = (
+            '<p class="unsub-text">You may stop future creator outreach at any time. '
+            f'<a href="{escape(unsub_url)}" class="unsub-link">Unsubscribe</a><br>'
+            f'{escape(postal)}</p>'
+        )
+        base_url = getattr(settings, 'MILANI_PUBLIC_BASE_URL', '').rstrip('/')
+    else:
+        from_email_safe = escape(from_email)
+        footer_html = (
+            '<p class="unsub-text">If you are not interested in future partnerships, '
+            f'<a href="mailto:{from_email_safe}?subject=Unsubscribe" '
+            'class="unsub-link">unsubscribe here</a>.</p>'
+        )
+        base_url = getattr(settings, 'SHIELDCLIMB_CALLBACK_BASE_URL', '').rstrip('/')
     pixel_url = f"{base_url}/api/webhooks/milani-open/?mid={message_id}"
 
     paragraphs = plain_body.strip().split('\n\n')
     html_paragraphs = []
     for para in paragraphs:
-        lines = para.strip().split('\n')
+        lines = escape(para.strip()).split('\n')
         if len(lines) == 1:
             html_paragraphs.append(f'<p style="margin:0 0 16px 0;">{lines[0]}</p>')
         else:
@@ -237,6 +273,10 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
             html_paragraphs.append(f'<p style="margin:0 0 16px 0;">{inner}</p>')
 
     body_html = '\n    '.join(html_paragraphs)
+    pixel_markup = '' if test_mode else (
+        f'<img src="{pixel_url}" width="1" height="1" border="0" '
+        'style="display:block;height:1px;width:1px;border:0;margin:0;padding:0;" alt="">'
+    )
 
     return f"""<!DOCTYPE html>
 <html lang="en">
@@ -264,13 +304,8 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
 <body>
   <div class="email-container">
     {body_html}
-    <p class="unsub-text">
-      You are receiving this email because we identified you as a great fit for our
-      upcoming campaigns. If you are not interested in brand partnerships at this time,
-      you can <a href="mailto:{from_email}?subject=Unsubscribe" class="unsub-link">unsubscribe here</a>.
-    </p>
-    <img src="{pixel_url}" width="1" height="1" border="0"
-         style="display:block;height:1px;width:1px;border:0;margin:0;padding:0;" alt="">
+    {footer_html}
+    {pixel_markup}
   </div>
 </body>
 </html>"""
@@ -280,11 +315,58 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
 # Public API
 # ---------------------------------------------------------------------------
 
+def _outreach_headers(message_id, from_email, *, v2, test=False):
+    headers = {
+        'List-Unsubscribe': f'<mailto:{from_email}?subject=Unsubscribe>',
+        'X-Campaign-ID': message_id,
+    }
+    test_mode = v2 and getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False)
+    if v2 and not test_mode:
+        from .milani_unsubscribe import unsubscribe_url
+        url = unsubscribe_url(message_id)
+        headers['List-Unsubscribe'] = f'<{url}>, <mailto:{from_email}?subject=Unsubscribe>'
+        headers['List-Unsubscribe-Post'] = 'List-Unsubscribe=One-Click'
+    if test or test_mode:
+        headers['X-Test-Send'] = 'true'
+    return headers
+
+
+def _dispatch_outreach(creator: 'Creator', payload: dict):
+    """Final provider-call boundary: enforce exact address in local test mode."""
+    if getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False):
+        if (getattr(settings, 'ENVIRONMENT', '') != 'local' or
+                not getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False) or
+                not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', False) or
+                creator.email.strip().casefold() != 'smthpines@gmail.com' or
+                payload.get('to') != [creator.email] or
+                any(payload.get(k) for k in ('cc', 'bcc'))):
+            raise ValueError('Local single-test allowlist blocked this provider call.')
+    return resend_sdk.Emails.send(payload)
+
+
 def send_milani_outreach_email(creator: 'Creator') -> bool:
     """
     Sends a Milani outreach email to the given Creator via Resend API.
     Returns True on success, False on failure. Never raises.
     """
+    if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
+        logger.warning('[Milani] Outbound sending disabled in this environment.')
+        return False
+    if getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) and (
+            getattr(settings, 'ENVIRONMENT', '') != 'local' or
+            not getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False) or
+            creator.email.strip().casefold() != 'smthpines@gmail.com'):
+        logger.warning('[Milani] Test recipient blocked before any DB claim.')
+        return False
+    v2 = getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False)
+    prepared = None
+    if v2:
+        from .milani_outreach_v2 import OutreachBlocked, prepare_approved_send
+        try:
+            prepared = prepare_approved_send(creator)
+        except OutreachBlocked as error:
+            logger.warning('[Milani] Safe send blocked: %s', error)
+            return False
     config     = _get_provider_config()
     api_key    = getattr(settings, config['api_key_setting'], '')
     from_email = config['from_email']
@@ -298,24 +380,40 @@ def send_milani_outreach_email(creator: 'Creator') -> bool:
         return False
 
     message_id  = uuid.uuid4().hex
-    variant     = _get_random_variant()
-    greeting    = _get_contextual_greeting()
-    subject     = variant['subject'].format(name=creator.name)
-    plain_body  = variant['body'].format(name=creator.name, greeting=greeting)
-    html_body   = _build_html_body(plain_body, message_id, from_email)
+    if v2:
+        subject = prepared['subject']
+        plain_body = prepared['body']
+        campaign = prepared['campaign']
+    else:
+        variant = _get_random_variant()
+        greeting = _get_contextual_greeting()
+        subject = variant['subject'].format(name=creator.name)
+        plain_body = variant['body'].format(name=creator.name, greeting=greeting)
+        campaign = ''
+    try:
+        html_body = _build_html_body(plain_body, message_id, from_email)
+        headers = _outreach_headers(message_id, from_email, v2=v2)
+    except ValueError as error:
+        logger.error('[Milani] Safe send blocked by missing configuration: %s', error)
+        return False
 
+    claim = None
+    if v2:
+        from .milani_outreach_v2 import claim_approved_send, OutreachBlocked
+        try:
+            claim = claim_approved_send(creator, prepared, message_id, provider)
+        except OutreachBlocked as error:
+            logger.warning('[Milani] Concurrent or ineligible recipient blocked: %s', error)
+            return False
     try:
         resend_sdk.api_key = api_key
-        response = resend_sdk.Emails.send({
+        response = _dispatch_outreach(creator, {
             "from":    f"{from_name} <{from_email}>",
             "to":      [creator.email],
             "subject": subject,
             "html":    html_body,
             "text":    plain_body,
-            "headers": {
-                "List-Unsubscribe": f"<mailto:{from_email}?subject=Unsubscribe>",
-                "X-Campaign-ID":    message_id,
-            },
+            "headers": headers,
         })
 
         resend_id = (
@@ -327,17 +425,32 @@ def send_milani_outreach_email(creator: 'Creator') -> bool:
             raise ValueError(f"Unexpected Resend response: {response}")
 
     except Exception as send_err:
-        logger.error(f"[Milani/{provider}] Failed to send to {creator.email}: {send_err}")
-        _write_log(creator, subject, 'Failed', message_id, provider)
-        creator.status = 'Failed'
-        creator.save(update_fields=['status'])
+        logger.error(f"[Milani/{provider}] Delivery outcome requires review for {creator.email}: {send_err}")
+        if v2 and claim is not None:
+            from .milani_outreach_v2 import mark_claim_uncertain
+            try:
+                mark_claim_uncertain(claim)
+            except Exception:
+                logger.exception('[Milani] Could not mark uncertain send; claim remains for investigation.')
+        else:
+            _write_log(creator, subject, 'Failed', message_id, provider)
+            creator.status = 'Failed'
+            creator.save(update_fields=['status'])
         return False
 
-    now = timezone.now()
-    creator.status = 'Sent'
-    creator.last_outreach = now
-    creator.save(update_fields=['status', 'last_outreach'])
-    _write_log(creator, subject, 'Sent', message_id, provider)
+    if v2:
+        from .milani_outreach_v2 import finish_claim
+        try:
+            finish_claim(claim, resend_id)
+        except Exception:
+            logger.exception('[Milani] Provider accepted message, but DB update failed. Do not retry automatically.')
+            return False
+    else:
+        now = timezone.now()
+        creator.status = 'Sent'
+        creator.last_outreach = now
+        creator.save(update_fields=['status', 'last_outreach'])
+        _write_log(creator, subject, 'Sent', message_id, provider)
     logger.info(
         f"[Milani/{provider}] Sent to {creator.email} | "
         f"resend_id={resend_id} | subject='{subject}'"
@@ -345,12 +458,34 @@ def send_milani_outreach_email(creator: 'Creator') -> bool:
     return True
 
 
-def send_specific_milani_variant(creator: 'Creator', subject: str, body: str) -> bool:
+def send_specific_milani_variant(creator: 'Creator', subject: str, body: str, *, variant_id=None) -> bool:
     """
     Sends a specific subject + body to a creator via the active Resend provider.
     Used for test sends from the admin preview page.
     Returns True on success, False on failure. Never raises.
     """
+    if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
+        logger.warning('[Milani] Test sending disabled in this environment.')
+        return False
+    if getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) and (
+            getattr(settings, 'ENVIRONMENT', '') != 'local' or
+            not getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False) or
+            creator.email.strip().casefold() != 'smthpines@gmail.com'):
+        logger.warning('[Milani] Test recipient blocked before any DB claim.')
+        return False
+    v2 = getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False)
+    prepared = None
+    if v2:
+        from .milani_outreach_v2 import OutreachBlocked, prepare_approved_send
+        from .models import MilaniEmailVariant
+        try:
+            if not variant_id:
+                raise OutreachBlocked('Variant ID is required for approved test sends.')
+            variant = MilaniEmailVariant.objects.get(pk=variant_id)
+            prepared = prepare_approved_send(creator, variant=variant)
+        except (OutreachBlocked, MilaniEmailVariant.DoesNotExist) as error:
+            logger.warning('[Milani] Specific send blocked: %s', error)
+            return False
     config     = _get_provider_config()
     api_key    = getattr(settings, config['api_key_setting'], '')
     from_email = config['from_email']
@@ -365,27 +500,40 @@ def send_specific_milani_variant(creator: 'Creator', subject: str, body: str) ->
     greeting   = _get_contextual_greeting()
 
     try:
-        subject_rendered = subject.format(name=creator.name)
-        body_rendered    = body.format(name=creator.name, greeting=greeting)
+        if v2:
+            subject_rendered = prepared['subject']
+            body_rendered = prepared['body']
+        else:
+            subject_rendered = subject.format(name=creator.name)
+            body_rendered = body.format(name=creator.name, greeting=greeting)
     except KeyError as e:
         logger.error(f"[Milani test send] Template placeholder error: {e}")
         return False
 
-    html_body = _build_html_body(body_rendered, message_id, from_email)
+    try:
+        html_body = _build_html_body(body_rendered, message_id, from_email)
+        headers = _outreach_headers(message_id, from_email, v2=v2, test=True)
+    except ValueError as error:
+        logger.error('[Milani] Specific send blocked by missing configuration: %s', error)
+        return False
 
+    claim = None
+    if v2:
+        from .milani_outreach_v2 import claim_approved_send, OutreachBlocked
+        try:
+            claim = claim_approved_send(creator, prepared, message_id, provider)
+        except OutreachBlocked as error:
+            logger.warning('[Milani] Specific send blocked: %s', error)
+            return False
     try:
         resend_sdk.api_key = api_key
-        response = resend_sdk.Emails.send({
+        response = _dispatch_outreach(creator, {
             "from":    f"{from_name} <{from_email}>",
             "to":      [creator.email],
             "subject": subject_rendered,
             "html":    html_body,
             "text":    body_rendered,
-            "headers": {
-                "List-Unsubscribe": f"<mailto:{from_email}?subject=Unsubscribe>",
-                "X-Campaign-ID":    message_id,
-                "X-Test-Send":      "true",
-            },
+            "headers": headers,
         })
         resend_id = (
             response.id if hasattr(response, 'id')
@@ -395,10 +543,24 @@ def send_specific_milani_variant(creator: 'Creator', subject: str, body: str) ->
         if not resend_id:
             raise ValueError(f"Unexpected Resend response: {response}")
     except Exception as send_err:
-        logger.error(f"[Milani test/{provider}] Failed to send to {creator.email}: {send_err}")
+        logger.error(f"[Milani test/{provider}] Outcome requires review for {creator.email}: {send_err}")
+        if v2 and claim is not None:
+            from .milani_outreach_v2 import mark_claim_uncertain
+            try:
+                mark_claim_uncertain(claim)
+            except Exception:
+                logger.exception('[Milani] Specific send claim requires manual reconciliation.')
         return False
 
-    _write_log(creator, subject_rendered, 'Sent', message_id, provider)
+    if v2:
+        from .milani_outreach_v2 import finish_claim
+        try:
+            finish_claim(claim, resend_id)
+        except Exception:
+            logger.exception('[Milani] Specific send accepted but log failed; never auto-retry.')
+            return False
+    else:
+        _write_log(creator, subject_rendered, 'Sent', message_id, provider)
     logger.info(f"[Milani test/{provider}] Sent to {creator.email} | subject='{subject_rendered}'")
     return True
 
@@ -409,6 +571,10 @@ def _write_log(
     send_status: str,
     message_id: str,
     provider: str = '',
+    *,
+    body_snapshot: str = '',
+    campaign_snapshot: str = '',
+    provider_message_id=None,
 ) -> None:
     try:
         MilaniOutreachLog.objects.get_or_create(
@@ -418,6 +584,9 @@ def _write_log(
                 'subject':       subject,
                 'status':        send_status,
                 'smtp_provider': provider,
+                'body_snapshot': body_snapshot,
+                'campaign_snapshot': campaign_snapshot,
+                'provider_message_id': provider_message_id,
                 'event_time':    timezone.now(),
             }
         )

@@ -2,10 +2,10 @@
 api/management/commands/send_outreach.py
 -----------------------------------------
 Processes all Creator records with status='Queued' and sends the Milani
-outreach email via Google Workspace SMTP.
+outreach email via Resend API.
 
 Staggered sends: a configurable delay between each email is enforced here
-to avoid Google rate limits (Gmail SMTP allows ~500/day on Workspace).
+to avoid provider throttling. The v2 system has a lower configurable run limit.
 
 Usage:
     python manage.py send_outreach
@@ -20,13 +20,13 @@ This command picks them up and fires the sends.
 
 import time
 
+from django.conf import settings
 from django.core.management.base import BaseCommand, CommandError
 
 from api.models import Creator
 from api.milani_email_service import send_milani_outreach_email
 
-# Google Workspace SMTP safe ceiling per run.
-# Adjust downward if you see "Daily sending quota exceeded" errors.
+# Legacy default. V2 applies MILANI_OUTREACH_MAX_BATCH separately.
 DEFAULT_LIMIT = 100
 DEFAULT_DELAY_SECONDS = 30  # 30s between sends = ~120 emails/hour comfortable margin
 
@@ -34,7 +34,7 @@ DEFAULT_DELAY_SECONDS = 30  # 30s between sends = ~120 emails/hour comfortable m
 class Command(BaseCommand):
     help = (
         'Sends Milani outreach emails to all Creators with status=Queued. '
-        'Applies a configurable inter-send delay to respect Google SMTP rate limits.'
+        'Applies a configurable inter-send delay and v2 approval and run-limit gates.'
     )
 
     def add_arguments(self, parser):
@@ -61,6 +61,37 @@ class Command(BaseCommand):
         delay: int = options['delay']
         limit: int = options['limit']
         dry_run: bool = options['dry_run']
+        if limit < 1:
+            raise CommandError('--limit must be at least 1.')
+        if delay < 0:
+            raise CommandError('--delay cannot be negative.')
+        if getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+            if not dry_run and (getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) or
+                                not getattr(settings, 'MILANI_OUTREACH_BULK_ENABLED', False)):
+                self.stdout.write(self.style.WARNING('V2 bulk delivery is disabled. Nothing sent.'))
+                return
+            from api.milani_outreach_v2 import eligible_variants
+            if not eligible_variants():
+                self.stdout.write(self.style.WARNING(
+                    'No eligible approved campaign for the Los Angeles date. Nothing sent.'))
+                return
+            if not dry_run and not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', False):
+                self.stdout.write(self.style.WARNING(
+                    'Local preview: all external email delivery is disabled. Nothing sent.'))
+                return
+            cap = getattr(settings, 'MILANI_OUTREACH_MAX_BATCH', 20)
+            if cap < 1:
+                self.stdout.write(self.style.WARNING(
+                    'Configured v2 batch limit is zero. Nothing sent.'))
+                return
+            if limit > cap:
+                limit = cap
+                self.stdout.write(self.style.WARNING(
+                    f'Outreach v2 run limited to {limit} recipients for safety.'))
+            if not dry_run and delay < 30:
+                delay = 30
+                self.stdout.write(self.style.WARNING(
+                    'Outreach v2 enforces at least 30 seconds between sends.'))
 
         queued = (
             Creator.objects

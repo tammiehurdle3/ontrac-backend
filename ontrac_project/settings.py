@@ -251,3 +251,19 @@ BACHS_FRONTEND_URL = env('BACHS_FRONTEND_URL', default='http://localhost:5173')
 #EVENT AUTO LOCATION
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
 STATICFILES_DIRS = [BASE_DIR / 'static']
+
+
+# Outreach v2 is deliberately opt-in. This is OFF on production until a verified
+# backup, approved campaign and explicit deployment approval are available.
+MILANI_OUTREACH_V2_ENABLED = env.bool('MILANI_OUTREACH_V2_ENABLED', default=False)
+MILANI_OUTREACH_SEND_ENABLED = env.bool(
+    'MILANI_OUTREACH_SEND_ENABLED',
+    default=not MILANI_OUTREACH_V2_ENABLED,
+)
+MILANI_PUBLIC_BASE_URL = env('MILANI_PUBLIC_BASE_URL', default='')
+MILANI_SENDER_POSTAL_ADDRESS = env('MILANI_SENDER_POSTAL_ADDRESS', default='')
+MILANI_OUTREACH_TIMEZONE = 'America/Los_Angeles'
+MILANI_OUTREACH_MAX_BATCH = env.int('MILANI_OUTREACH_MAX_BATCH', default=20)
+# Explicit opt-ins: local self-addressed test must never activate bulk delivery.
+MILANI_OUTREACH_TEST_MODE = env.bool('MILANI_OUTREACH_TEST_MODE', default=False)
+MILANI_OUTREACH_BULK_ENABLED = env.bool('MILANI_OUTREACH_BULK_ENABLED', default=False)

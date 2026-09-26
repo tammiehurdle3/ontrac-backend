@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant, MilaniSuppression
 from django.shortcuts import get_object_or_404
 from django.urls import path as url_path, reverse
 from django.conf import settings
@@ -825,17 +825,49 @@ class RefundBalanceAdmin(admin.ModelAdmin):
 
 @admin.action(description='Send Milani Outreach Email (Individual)')
 def send_individual_outreach(modeladmin, request, queryset):
-    count = 0
+    if getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+        if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', False):
+            modeladmin.message_user(request, 'Outreach sending is disabled here.', level='WARNING')
+            return
+        single_only = (getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) or
+                       not getattr(settings, 'MILANI_OUTREACH_BULK_ENABLED', False))
+        if single_only and queryset.count() != 1:
+            modeladmin.message_user(request, 'Select exactly one recipient. Bulk delivery is disabled.', level='WARNING')
+            return
+        if (getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) and
+                queryset.exclude(email__iexact='smthpines@gmail.com').exists()):
+            modeladmin.message_user(request, 'The local test is restricted to the test inbox.', level='WARNING')
+            return
+    sent = failed = 0
     for creator in queryset:
-        send_milani_outreach_email(creator)
-        count += 1
-    modeladmin.message_user(request, f"Successfully triggered individual send for {count} creators.")
+        if send_milani_outreach_email(creator):
+            sent += 1
+        else:
+            failed += 1
+    modeladmin.message_user(request, f"Verified sent: {sent}; blocked or failed: {failed}.",
+                            level='WARNING' if failed else 'SUCCESS')
     
 @admin.action(description='QUEUE Milani Outreach for Staggered Send (Bulk, Max 100)')
 def queue_bulk_outreach(modeladmin, request, queryset):
+    # Do not queue hundreds of recipients when no reviewed campaign can send.
+    if getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+        if (getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) or
+                not getattr(settings, 'MILANI_OUTREACH_BULK_ENABLED', False)):
+            modeladmin.message_user(request, 'Bulk queuing is disabled for outreach V2.', level='WARNING')
+            return
+        from .milani_outreach_v2 import eligible_variants
+        if not eligible_variants():
+            modeladmin.message_user(request, 'No eligible approved campaign. Nobody queued.',
+                                   level='WARNING')
+            return
+        if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', False):
+            modeladmin.message_user(request,
+                                   'This is a local review environment. Sending and bulk queues are disabled.',
+                                   level='WARNING')
+            return
     max_send = 100 
     # FIX: Extract the IDs first since Django prevents .update() on sliced querysets
-    valid_pks = list(queryset.filter(status__in=['New Lead', 'Passed']).values_list('pk', flat=True)[:max_send])
+    valid_pks = list(queryset.filter(status__in=['New Lead', 'Passed'], do_not_contact=False).values_list('pk', flat=True)[:max_send])
     
     if not valid_pks:
         modeladmin.message_user(request, "No eligible creators (New Lead / Passed) found in selection.", level='WARNING')
@@ -872,7 +904,7 @@ class CreatorAdminForm(forms.ModelForm):
 @admin.register(Creator)
 class CreatorAdmin(admin.ModelAdmin):
     form = CreatorAdminForm
-    list_display = ('name', 'email', 'colored_status', 'last_outreach', 'country', 'preview_and_send')
+    list_display = ('name', 'email', 'colored_status', 'do_not_contact', 'last_outreach', 'country', 'preview_and_send')
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
     actions = [send_individual_outreach, queue_bulk_outreach]
@@ -880,7 +912,7 @@ class CreatorAdmin(admin.ModelAdmin):
     readonly_fields = ('outreach_panel',)
     fieldsets = (
         (None, {
-            'fields': ('name', 'email', 'country', 'portfolio_link', 'status', 'last_outreach'),
+            'fields': ('name', 'email', 'country', 'portfolio_link', 'personalization_note', 'do_not_contact', 'status', 'last_outreach'),
         }),
         ('Milani Outreach', {
             'description': 'Duplicate check runs as you type the email. '
@@ -894,19 +926,25 @@ class CreatorAdmin(admin.ModelAdmin):
 
     @admin.display(description='Outreach tools')
     def outreach_panel(self, obj):
+        preview_only = not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True)
+        label = 'Save creator (no email in local preview)' if preview_only else 'Save & Send Outreach'
+        description = (
+            'Local preview only. All external delivery is disabled.'
+            if preview_only else
+            'Saves this creator and attempts one email from an eligible approved campaign.'
+        )
         check_url = reverse('admin:creator_check_email')
         send_url = reverse('admin:creator_send_outreach', args=[obj.pk]) if (obj and obj.pk) else ''
         current_pk = obj.pk if (obj and obj.pk) else ''
         return format_html(
-            '<div class="creator-outreach-tools" data-check-url="{}" data-send-url="{}" data-current-pk="{}">'
+            '<div class="creator-outreach-tools" data-check-url="{}" data-send-url="{}" data-current-pk="{}" data-preview-only="{}">'
             '<div class="co-email-status" style="font-size:13px;margin-bottom:14px;color:#888;">'
             'Enter an email above to check for duplicates.</div>'
             '<div style="padding:14px;background:#f0faf5;border:2px solid #1a7f5a;border-radius:6px;max-width:560px;">'
             '<button type="submit" name="_save_and_send" value="1" '
             'style="padding:12px 24px;background:#1a7f5a;color:#fff;border:none;border-radius:4px;'
-            'font-weight:700;font-size:15px;cursor:pointer;">Save &amp; Send Outreach</button>'
-            '<p style="margin:10px 0 0;font-size:13px;color:#333;">Saves this creator and immediately '
-            'sends one Milani outreach email (random active variant).</p>'
+            'font-weight:700;font-size:15px;cursor:pointer;">{}</button>'
+            '<p style="margin:10px 0 0;font-size:13px;color:#333;">{}</p>'
             '</div>'
             '<div class="co-send-now" hidden style="margin-top:12px;">'
             '<button type="button" class="co-send-now-btn" '
@@ -915,7 +953,7 @@ class CreatorAdmin(admin.ModelAdmin):
             '<span class="co-send-now-result" style="margin-left:10px;font-size:13px;"></span>'
             '</div>'
             '</div>',
-            check_url, send_url, current_pk,
+            check_url, send_url, current_pk, 'true' if preview_only else 'false', label, description,
         )
 
     # --- 4. COLOR-CODING METHOD (Your second idea) ---
@@ -939,9 +977,16 @@ class CreatorAdmin(admin.ModelAdmin):
     @admin.display(description='Preview / Send')
     def preview_and_send(self, obj):
         from .models import MilaniEmailVariant
-        first = MilaniEmailVariant.objects.filter(is_active=True).first()
-        if not first:
-            return '—'
+        if getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+            from .milani_outreach_v2 import eligible_variants
+            candidates = eligible_variants()
+            if not candidates:
+                return format_html('<a href="/admin/api/milaniemailvariant/">Review campaign drafts</a>')
+            first = candidates[0]
+        else:
+            first = MilaniEmailVariant.objects.filter(is_active=True).first()
+            if not first:
+                return '—'
         return format_html(
             '<a href="/admin/api/milaniemailvariant/{}/preview/?creator_id={}" target="_blank" '
             'style="padding:3px 10px;background:#1a7f5a;color:#fff;border-radius:4px;'
@@ -966,6 +1011,11 @@ class CreatorAdmin(admin.ModelAdmin):
         if not result:
             return
         ok, email = result
+        if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
+            self.message_user(request,
+                              f'Creator saved. Local preview mode: no email was sent to {email}.',
+                              level='INFO')
+            return
         if ok:
             self.message_user(request, f'Outreach email sent to {email}.')
         else:
@@ -1040,11 +1090,12 @@ class CreatorAdmin(admin.ModelAdmin):
 @admin.register(MilaniOutreachLog)
 class MilaniOutreachLogAdmin(admin.ModelAdmin):
     show_full_result_count = False
-    list_display = ('creator', 'subject', 'status', 'smtp_provider', 'event_time', 'sendgrid_message_id')
+    list_display = ('creator', 'campaign_snapshot', 'subject', 'status', 'smtp_provider', 'event_time', 'sendgrid_message_id')
     list_filter = ('status', 'smtp_provider', 'event_time')
     search_fields = ('creator__name', 'creator__email', 'subject')
     date_hierarchy = 'event_time'
-    readonly_fields = ('creator', 'subject', 'status', 'event_time', 'sendgrid_message_id')
+    readonly_fields = ('creator', 'subject', 'body_snapshot', 'campaign_snapshot',
+                       'provider_message_id', 'status', 'event_time', 'sendgrid_message_id')
     list_per_page = 100
     list_select_related = ('creator',)
 
@@ -1086,7 +1137,7 @@ class MilaniEmailVariantForm(forms.ModelForm):
             'style': 'width:100%; font-family: monospace; font-size:13px;',
         }),
         help_text=(
-            "Use {name} for creator name, {greeting} for day-aware greeting. "
+            "Use {name} for creator name, {greeting} for LA day-aware greeting, and {personal_line} for optional real observations. "
             "Separate paragraphs with ONE blank line. No em dashes."
         )
     )
@@ -1099,11 +1150,26 @@ class MilaniEmailVariantForm(forms.ModelForm):
         model = MilaniEmailVariant
         fields = '__all__'
 
+    def clean(self):
+        from string import Formatter
+        from django import forms
+        cleaned = super().clean()
+        allowed = {'name', 'greeting', 'personal_line'}
+        for field in ('subject', 'body'):
+            try:
+                used = {key for _,key,_,_ in Formatter().parse(cleaned.get(field, '')) if key}
+            except ValueError as exc:
+                self.add_error(field, f'Invalid template syntax: {exc}')
+                continue
+            if used - allowed:
+                self.add_error(field, 'Unknown placeholders: ' + ', '.join(sorted(used - allowed)))
+        return cleaned
+
 
 @admin.register(MilaniEmailVariant)
 class MilaniEmailVariantAdmin(admin.ModelAdmin):
     form = MilaniEmailVariantForm
-    list_display  = ('name', 'subject_preview', 'is_active', 'updated_at', 'preview_link')
+    list_display  = ('name', 'subject_preview', 'approval_state', 'is_active', 'starts_on', 'ends_on', 'updated_at', 'preview_link')
     list_editable = ('is_active',)
     list_filter   = ('is_active',)
     search_fields = ('name', 'subject', 'body')
@@ -1112,12 +1178,17 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
 
     fieldsets = (
         (None, {
-            'fields': ('name', 'is_active'),
+            'fields': ('name', 'is_active', 'campaign_name', 'approval_state',
+                       'is_evergreen', 'starts_on', 'ends_on'),
+            'description': ('Safety: only ACTIVE and APPROVED variants inside the Los Angeles '
+                            'date window can send. Old imported templates remain drafts.'),
         }),
         ('Email Content', {
             'description': (
                 'Use <strong>{name}</strong> for the creator name. '
-                'Use <strong>{greeting}</strong> for the day-aware greeting sentence. '
+                'Use <strong>{greeting}</strong> for an optional Los Angeles day-aware greeting. '
+                'Use <strong>{personal_line}</strong> on its own paragraph. '
+                'If the creator has no observation, that paragraph disappears. '
                 'Separate paragraphs with a blank line. '
                 '<strong>No em dashes ( — )</strong>.'
             ),
@@ -1157,6 +1228,14 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
 
         if not obj or not obj.pk:
             return mark_safe('<p style="color:#888;">Save the variant first.</p>')
+        if getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+            if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', False):
+                return mark_safe('<p style="color:#25683b;">Local preview: delivery is disabled. Use the Preview link to inspect both optional-personalization cases.</p>')
+            from .milani_outreach_v2 import require_approved_variant, OutreachBlocked
+            try:
+                require_approved_variant(obj)
+            except OutreachBlocked:
+                return mark_safe('<p>Only current, approved and active campaigns can send emails.</p>')
 
         creators = Creator.objects.all().order_by('name')[:200]
         if not creators:
@@ -1266,14 +1345,18 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
         preselect_creator_id = (request.GET.get('creator_id') or '').strip()
         if preselect_creator_id and not preselect_creator_id.isdigit():
             preselect_creator_id = ''
-        sample_name  = "Sarah"
-        sample_greeting = "Hope you are having a great week so far!"
-        subject_rendered = variant.subject.replace('{name}', sample_name)
-
+        from .milani_outreach_v2 import render_variant, OutreachBlocked
+        creator = Creator.objects.filter(pk=preselect_creator_id).first() if preselect_creator_id else None
+        if creator is None:
+            creator = Creator(name='Sarah', email='sarah@example.invalid')
+        sample_name = creator.name
         try:
-            body_rendered = variant.body.format(name=sample_name, greeting=sample_greeting)
-        except KeyError as e:
-            body_rendered = f"[Template error: unknown placeholder {e}]\n\n{variant.body}"
+            rendered = render_variant(variant, creator)
+            subject_rendered = rendered['subject']
+            body_rendered = rendered['body']
+        except OutreachBlocked as error:
+            subject_rendered = '[Template error]'
+            body_rendered = str(error)
 
         from_email = 'diana@milani-cosmetics.com'
         base_url   = getattr(django_settings, 'SHIELDCLIMB_CALLBACK_BASE_URL', 'https://api.ontracourier.us').rstrip('/')
@@ -1282,7 +1365,8 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
         paragraphs      = body_rendered.strip().split('\n\n')
         html_paragraphs = []
         for para in paragraphs:
-            lines = para.strip().split('\n')
+            from html import escape as html_escape
+            lines = html_escape(para.strip()).split('\n')
             if len(lines) == 1:
                 html_paragraphs.append(f'<p style="margin:0 0 16px 0;">{lines[0]}</p>')
             else:
@@ -1328,16 +1412,22 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
 </body>
 </html>"""
 
+        if getattr(django_settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+            from .milani_email_service import _build_html_body, _get_provider_config
+            from_email = _get_provider_config()['from_email']
+            # Preview uses exactly the sender HTML. Synthetic ID cannot log an open.
+            email_html = _build_html_body(body_rendered, '0' * 32, from_email)
+
         email_b64 = base64.b64encode(email_html.encode()).decode()
         updated_str = variant.updated_at.strftime('%b %d, %Y %H:%M UTC')
-        active_str  = 'Active' if variant.is_active else 'Paused'
+        active_str  = f"{variant.get_approval_state_display()} / {'Active' if variant.is_active else 'Paused'}"
 
         preview_page = f"""<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Preview: {variant.name}</title>
+  <title>Preview: {html_escape(variant.name)}</title>
   <style>
     *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
     body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -1505,7 +1595,7 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
 </div>
 
 <div class="subject-bar" id="subjectBar">
-  <strong>Subject:</strong>&nbsp; <span id="subjectDisplay">{subject_rendered}</span> &nbsp;&nbsp;
+  <strong>Subject:</strong>&nbsp; <span id="subjectDisplay">{html_escape(subject_rendered)}</span> &nbsp;&nbsp;
   <strong>From:</strong>&nbsp; <span id="fromDisplay">Diana Higuera &lt;{from_email}&gt;</span> &nbsp;&nbsp;
   <strong>Previewing as:</strong>&nbsp; <span id="nameDisplay">Sample (Sarah)</span>
 </div>
@@ -1567,7 +1657,7 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
           </div>
         </div>
         <div class="mail-header">
-          <div class="mail-subject-line" id="iphoneSubject">{subject_rendered}</div>
+          <div class="mail-subject-line" id="iphoneSubject">{html_escape(subject_rendered)}</div>
           <div class="mail-sender-row">
             <div class="mail-avatar">D</div>
             <div class="mail-sender-info">
@@ -1702,6 +1792,13 @@ function updatePreviewName(sel) {{
   currentCreatorId = opt.value;
   const name = opt.dataset.name || 'Sarah';
   const email = opt.dataset.email || '';
+  // Server-render the EXACT message for each selected creator, including optional
+  // personalization and the deterministic Los Angeles greeting.
+  if (opt.value !== PRESELECT_CREATOR_ID) {{
+    window.location.assign('/admin/api/milaniemailvariant/' + VARIANT_ID +
+      '/preview/?creator_id=' + encodeURIComponent(opt.value));
+    return;
+  }}
   // Sync both selects
   ['creatorSelect','creatorSelectMobile'].forEach(id => {{
     const s = document.getElementById(id);
@@ -1800,6 +1897,43 @@ window.addEventListener('load', () => {{
 </body>
 </html>"""
 
+        if getattr(django_settings, 'MILANI_OUTREACH_V2_ENABLED', False):
+            from .milani_outreach_v2 import require_approved_variant, OutreachBlocked
+            can_send = bool(getattr(django_settings, 'MILANI_OUTREACH_SEND_ENABLED', False))
+            if can_send:
+                try:
+                    require_approved_variant(variant)
+                except OutreachBlocked:
+                    can_send = False
+            if not can_send:
+                is_preview_only = not getattr(django_settings, 'MILANI_OUTREACH_SEND_ENABLED', False)
+                notice = ('LOCAL PREVIEW: no emails can be sent from this environment.'
+                          if is_preview_only else
+                          'DRAFT / INELIGIBLE CAMPAIGN: approve a current campaign before sending.')
+                preview_page = preview_page.replace(
+                    '<body>',
+                    '<body><div role="status" style="background:#164734;color:#e8fff1;'
+                    'padding:12px 24px;font:600 13px system-ui;text-align:center">'
+                    + notice + '</div>', 1)
+                preview_page = preview_page.replace(
+                    '<h3>&#9993; Send Test Email</h3>',
+                    '<h3>&#128065; Preview only</h3>')
+                preview_page = preview_page.replace(
+                    'Select a creator to send to...',
+                    'Select a creator to preview...')
+                for call in ('sendTest()', 'sendTestMobile()'):
+                    old_button = ('<button onclick="' + call +
+                                  '">Send this variant to selected creator</button>')
+                    new_button = (
+                        '<button type="button" disabled aria-disabled="true" '
+                        'style="background:#404a48;opacity:.85;cursor:not-allowed">'
+                        'Sending disabled — preview only</button>')
+                    if old_button not in preview_page:
+                        raise RuntimeError('Expected send control missing in admin preview.')
+                    preview_page = preview_page.replace(old_button, new_button)
+                preview_page = preview_page.replace(
+                    'Placeholders:</strong> {name}, {greeting}',
+                    'Placeholders:</strong> {name}, {greeting}, {personal_line}')
         return HttpResponse(preview_page, content_type='text/html')
 
 
@@ -1832,6 +1966,9 @@ window.addEventListener('load', () => {{
                     content_type='application/json'
                 )
             try:
+                if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
+                    return JsonResponse({'success': False,
+                        'error': 'Local preview mode: sending is disabled. No message was sent.'})
                 creator = CreatorModel.objects.get(pk=creator_id)
                 config = _get_provider_config()
                 api_key = getattr(settings, config['api_key_setting'], '')
@@ -1846,7 +1983,7 @@ window.addEventListener('load', () => {{
                         }),
                         content_type='application/json'
                     )
-                ok = send_specific_milani_variant(creator, variant.subject, variant.body)
+                ok = send_specific_milani_variant(creator, variant.subject, variant.body, variant_id=variant.pk)
                 if ok:
                     return HttpResponse(
                         _json.dumps({'success': True, 'email': creator.email}),
@@ -1905,3 +2042,13 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 
     def has_delete_permission(self, request, obj=None):
         return False
+
+@admin.register(MilaniSuppression)
+class MilaniSuppressionAdmin(admin.ModelAdmin):
+    list_display = ('email', 'reason', 'created_at')
+    search_fields = ('email', 'reason')
+    readonly_fields = ('created_at',)
+    list_per_page = 50
+    def save_model(self, request, obj, form, change):
+        obj.email = obj.email.strip().lower()
+        super().save_model(request, obj, form, change)

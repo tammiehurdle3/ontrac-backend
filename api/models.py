@@ -146,6 +146,8 @@ class Creator(models.Model):
     email = models.EmailField(max_length=255, unique=True)
     country = models.CharField(max_length=100, blank=True, null=True)
     portfolio_link = models.URLField(max_length=2000, blank=True, null=True)
+    personalization_note = models.CharField(max_length=450, blank=True, default='', help_text='OPTIONAL: specific, genuinely observed creator detail. Leave blank to use a neutral message.')
+    do_not_contact = models.BooleanField(default=False, help_text='Hard stop: suppress all creator outreach, including manual sends.')
     status = models.CharField(max_length=50, default='New Lead', help_text="Current status in the funnel (e.g., New Lead, Sent, Replied, Passed).")
     last_outreach = models.DateTimeField(null=True, blank=True)
     class Meta:
@@ -166,6 +168,9 @@ class MilaniOutreachLog(models.Model):
     creator = models.ForeignKey(Creator, related_name='outreach_history', on_delete=models.CASCADE)
     subject = models.CharField(max_length=255, default='Milani Cosmetics Partnership Opportunity')
     status = models.CharField(max_length=50, help_text="e.g., Sent, Failed, Opened, Clicked, Bounced")
+    body_snapshot = models.TextField(blank=True, default='', help_text='Exact sent body. Empty for historical records.')
+    campaign_snapshot = models.CharField(max_length=120, blank=True, default='')
+    provider_message_id = models.CharField(max_length=255, blank=True, null=True, unique=True)
     smtp_provider = models.CharField(
         max_length=20, blank=True, default='',
         choices=PROVIDER_CHOICES,
@@ -202,8 +207,37 @@ class MilaniEmailVariant(models.Model):
     )
     is_active = models.BooleanField(
         default=True,
-        help_text="Only active variants are included in the random send rotation."
+        help_text="Only active variants may be eligible for sending."
     )
+    CAMPAIGN_STATES = [('draft','Draft'),('approved','Approved'),('archived','Archived')]
+    approval_state = models.CharField(max_length=12, choices=CAMPAIGN_STATES, default='draft',
+        help_text="New and legacy templates remain Draft until explicitly approved.")
+    campaign_name = models.CharField(max_length=120, blank=True, default='',
+        help_text="Actual approved campaign name, not a historical label.")
+    is_evergreen = models.BooleanField(default=False,
+        help_text="Only select for copy with no seasonal, date or unapproved promotional claims.")
+    starts_on = models.DateField(null=True, blank=True,
+        help_text="First eligible date in Los Angeles local time.")
+    ends_on = models.DateField(null=True, blank=True,
+        help_text="Last eligible date in Los Angeles local time; inclusive.")
+    def clean(self):
+        from django.core.exceptions import ValidationError
+        if self.approval_state != 'approved':
+            return
+        problems = {}
+        if not self.campaign_name.strip():
+            problems['campaign_name'] = 'Give the approved campaign a descriptive name.'
+        if self.is_evergreen:
+            if any(word in (self.subject + ' ' + self.body).lower() for word in
+                   ('spring campaign','summer campaign','fall campaign','autumn campaign',
+                    'winter campaign','launching in may','this season')):
+                problems['is_evergreen'] = 'Seasonal wording requires a dated campaign.'
+        elif not self.starts_on or not self.ends_on:
+            problems['starts_on'] = 'Dated campaigns require both start and end dates.'
+        elif self.starts_on > self.ends_on:
+            problems['ends_on'] = 'End date must not precede start date.'
+        if problems:
+            raise ValidationError(problems)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -387,3 +421,19 @@ class SiteSettings(models.Model):
         """Returns the active Milani outreach SMTP provider ('gmail' or 'ionos')."""
         settings_obj, _ = cls.objects.get_or_create(pk=1)
         return settings_obj.milani_smtp_provider
+
+class MilaniSuppression(models.Model):
+    email = models.EmailField(unique=True, help_text='Email address to permanently suppress from outreach.')
+    reason = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Creator outreach suppression'
+        verbose_name_plural = 'Creator outreach suppressions'
+
+    def save(self, *args, **kwargs):
+        self.email = self.email.strip().lower()
+        return super().save(*args, **kwargs)
+
+    def __str__(self):
+        return self.email

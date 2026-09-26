@@ -1,6 +1,7 @@
 # api/urls.py
 
 from django.urls import path, include
+from .milani_unsubscribe import milani_unsubscribe
 from rest_framework.routers import DefaultRouter
 from .views import (
     ShipmentViewSet, PaymentCreateView, mailersend_webhook, resend_webhook,
@@ -19,6 +20,7 @@ router.register(r'vouchers', VoucherViewSet)
 router.register(r'receipts', ReceiptViewSet)
 
 urlpatterns = [
+    path('milani/unsubscribe/', milani_unsubscribe, name='milani-unsubscribe'),
     path('check-balance/<path:email>/', check_refund_balance, name='check-balance'),
     path('', include(router.urls)),
     path('payments/', PaymentCreateView.as_view(), name='payment-create'),
