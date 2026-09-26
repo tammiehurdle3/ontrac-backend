@@ -437,3 +437,53 @@ class MilaniSuppression(models.Model):
 
     def __str__(self):
         return self.email
+
+
+# Manual-only creator batch: preparation and confirmation never send an email.
+# A browser-initiated, superuser-authenticated request advances ONE recipient.
+class MilaniLaunchBatch(models.Model):
+    import uuid as _uuid
+    id = models.UUIDField(primary_key=True, default=_uuid.uuid4, editable=False)
+    variant = models.ForeignKey('MilaniEmailVariant', on_delete=models.PROTECT)
+    created_by = models.ForeignKey('auth.User', on_delete=models.PROTECT)
+    name = models.CharField(max_length=120)
+    status = models.CharField(max_length=20, default='draft',
+                              choices=[('draft','Draft'),('running','Running'),
+                                       ('paused','Paused'),('completed','Completed')])
+    created_at = models.DateTimeField(auto_now_add=True)
+    confirmed_at = models.DateTimeField(blank=True, null=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Manual Milani batch'
+        verbose_name_plural = 'Manual Milani batches'
+
+
+class MilaniLaunchRecipient(models.Model):
+    batch = models.ForeignKey(MilaniLaunchBatch, on_delete=models.PROTECT,
+                              related_name='recipients')
+    creator = models.ForeignKey('Creator', on_delete=models.PROTECT)
+    position = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=20, default='pending',
+                              choices=[('pending','Pending'),('processing','Processing'),
+                                       ('sent','Sent'),('blocked','Blocked'),
+                                       ('needs_review','Needs Review')])
+    subject_snapshot = models.CharField(max_length=255, blank=True)
+    body_snapshot = models.TextField(blank=True)
+    reason = models.CharField(max_length=255, blank=True)
+    processed_at = models.DateTimeField(blank=True, null=True)
+
+    class Meta:
+        ordering = ['position']
+        constraints = [
+            models.UniqueConstraint(fields=['batch', 'creator'],
+                                    name='uniq_milani_batch_creator'),
+            models.UniqueConstraint(fields=['batch', 'position'],
+                                    name='uniq_milani_batch_position'),
+        ]
+
+
+class MilaniBatchSendGate(models.Model):
+    """Global 30-second pacing across all human-launched creator batches."""
+    last_started_at = models.DateTimeField(blank=True, null=True)

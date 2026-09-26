@@ -1,0 +1,117 @@
+{% extends "admin/base_site.html" %}
+{% load static %}
+{% block title %}Milani Manual Batches{% endblock %}
+{% block extrastyle %}{{ block.super }}
+<style>
+.batch{max-width:1130px;margin:20px auto 70px;font:15px/1.6 system-ui,sans-serif}
+.batch *{box-sizing:border-box}
+.batch-hero{padding:26px;background:#143d31;color:white;border-radius:14px}
+.batch-hero h1{font-size:31px;letter-spacing:-.03em;color:white;margin:5px 0}
+.batch-hero p{color:#c6e6d7;margin:0}
+.batch-box{border:1px solid var(--hairline-color,#bbc8c0);border-radius:12px;padding:20px;margin:16px 0;background:var(--body-bg,#fff)}
+.batch-box h2{font-size:20px;margin:0 0 10px;color:var(--body-fg,#333)}
+.batch-alert{background:#fff0d8;color:#65451f;border:1px solid #d0a35e;padding:12px 15px;margin:14px 0;border-radius:8px}
+.batch-success{background:#e3f7e9;color:#205738;border-color:#70ba86}
+.batch-btn{border:0;border-radius:8px;background:#15754d;color:white!important;font-weight:700;font-size:14px;padding:11px 17px;cursor:pointer;text-decoration:none!important;display:inline-block}
+.batch-secondary{background:#34473d}.batch-danger{background:#9b4436}
+.batch-btn:disabled{opacity:.5;cursor:not-allowed}
+.batch-form{display:flex;gap:16px;align-items:end;flex-wrap:wrap}
+.batch-form label{display:block;font-weight:700;font-size:13px}
+.batch-form select,.batch-form input[type=text],.batch-form input[type=search]{padding:10px;border:1px solid #829589;border-radius:6px;width:min(360px,100%);max-width:100%;background:var(--body-bg,#fff);color:var(--body-fg,#333)}
+.batch-table{width:100%;border-collapse:collapse;min-width:540px}
+.batch-table td,.batch-table th{border-bottom:1px solid var(--hairline-color,#ccd9d0);padding:10px;text-align:left}
+.batch-scroll{max-height:510px;overflow:auto;border:1px solid var(--hairline-color,#ccd9d0);border-radius:9px;margin:18px 0}
+.batch-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(145px,1fr));gap:12px;margin:18px 0}
+.batch-stat{border:1px solid var(--hairline-color,#bbc8c0);border-radius:9px;padding:12px}
+.batch-stat strong{display:block;font-size:26px}
+.batch-item{border:1px solid var(--hairline-color,#bbc8c0);padding:14px;border-radius:8px;margin:10px 0}
+.batch-item summary{cursor:pointer;font-weight:700}
+.batch-copy{white-space:pre-wrap;overflow-wrap:anywhere;border:1px solid var(--hairline-color,#bbc8c0);border-radius:7px;padding:12px}
+.batch-pill{border-radius:30px;padding:2px 9px;background:#d9efdf;color:#245332;font-size:12px}
+.batch-pill.blocked,.batch-pill.needs_review{background:#fce6cf;color:#7e461f}
+.batch-muted{color:var(--body-quiet-color,#879389);font-size:13px}
+#delivery-events{white-space:pre-wrap;min-height:50px}
+</style>{% endblock %}
+{% block content %}
+<div class="batch">
+<header class="batch-hero"><small>MANUAL CREATOR OUTREACH</small>
+<h1>{% if page == 'home' %}Prepare your next batch{% else %}Review and control delivery{% endif %}</h1>
+<p>Preparing and confirming never send email. Each actual delivery is an explicit request from this browser, with a server-enforced 30-second gap.</p></header>
+{% if error %}<div class="batch-alert" role="alert">{{ error }}</div>{% endif %}
+{% if readiness %}<div class="batch-alert" role="alert">Delivery readiness: {{ readiness }}</div>{% endif %}
+{% if page == 'home' %}
+<section class="batch-box"><h2>Choose the campaign and recipients</h2>
+<p><a href="{% url 'admin:api_milanilaunchbatch_changelist' %}">View previous batches and resume interrupted work ↗</a></p>
+{% if not variants %}<div class="batch-alert">No currently eligible approved campaign. <a href="{% url 'admin:api_milaniemailvariant_changelist' %}">Approve your draft email</a> to proceed.</div>{% endif %}
+<form method="post" id="batch-create">{% csrf_token %}
+<div class="batch-form">
+<div><label for="variant">Approved campaign</label><select name="variant_id" id="variant" required {% if not variants %}disabled{% endif %}>
+<option value="">Select campaign...</option>
+{% for v in variants %}<option value="{{ v.pk }}">{{ v.campaign_name }} — {{ v.name }}</option>{% endfor %}
+</select></div>
+<div><label for="creator-filter">Find creators</label><input id="creator-filter" type="search" placeholder="Name or email"></div>
+</div>
+<div class="batch-scroll"><table class="batch-table"><thead><tr><th>Select</th><th>Creator</th><th>Current status</th></tr></thead><tbody>
+{% for c in creators %}
+<tr class="creator-row" data-query="{{ c.name|lower }} {{ c.email|lower }}">
+<td><input type="checkbox" name="creator_ids" class="creator-check" value="{{ c.pk }}" aria-label="Select {{ c.name }}" {% if c.pk in selected %}checked{% endif %}></td>
+<td><strong>{{ c.name }}</strong><div class="batch-muted">{{ c.email }}</div></td>
+<td>{{ c.status }} {% if c.do_not_contact %}<strong>· Do Not Contact</strong>{% endif %}</td></tr>
+{% endfor %}
+</tbody></table></div>
+<div class="batch-form"><div><strong><span id="selected-count">0</span> selected</strong><div class="batch-muted">Maximum 20. No emails are queued or sent here.</div></div>
+<button class="batch-btn" type="submit" id="review-button" {% if not variants %}disabled{% endif %}>Review exact messages →</button></div>
+</form></section>
+{% endif %}
+{% if page == 'review' %}
+<section class="batch-box"><h2>{{ batch.name }}</h2>
+<p class="batch-muted">Batch {{ batch.pk }} · status: {{ batch.get_status_display }} · created by {{ batch.created_by.username }}</p>
+<div class="batch-grid"><div class="batch-stat">Selected<strong>{{ items|length }}</strong></div>
+<div class="batch-stat">Pending<strong>{{ ready }}</strong></div>
+<div class="batch-stat">Max recipients<strong>20</strong></div>
+<div class="batch-stat">Gap<strong>30s</strong></div></div>
+<p><a class="batch-btn batch-secondary" href="{{ home_url }}">New batch</a></p></section>
+<section class="batch-box"><h2>Review every individual message</h2>
+<p class="batch-muted">Frozen email snapshots from each creator record. Changes to a creator or campaign block delivery until reviewed.</p>
+{% for item in items %}
+<details class="batch-item" id="person-{{ item.position }}"><summary>
+<span class="batch-pill {{ item.status }}">{{ item.get_status_display }}</span>
+{{ item.position }}. {{ item.creator.name }} — {{ item.creator.email }}</summary>
+{% if item.reason %}<div class="batch-alert">{{ item.reason }}</div>{% endif %}
+{% if item.subject_snapshot %}<p><strong>Subject:</strong> {{ item.subject_snapshot }}</p>
+<div class="batch-copy">{{ item.body_snapshot }}</div>{% endif %}
+</details>
+{% endfor %}
+</section>
+{% if batch.status == 'draft' %}
+<section class="batch-box"><h2>Confirm without sending</h2><p>Confirming authorizes this particular list. You must separately click Start Delivery afterward.</p>
+{% if ready and not readiness %}
+<form method="post" action="{{ confirm_url }}">{% csrf_token %}
+<div class="batch-form"><div><label for="confirmation">Type {{ confirm_phrase }} exactly</label>
+<input id="confirmation" name="confirmation" type="text" required autocomplete="off"></div>
+<button class="batch-btn" type="submit">Confirm this batch only</button></div></form>
+{% else %}<div class="batch-alert">Resolve readiness or select eligible recipients to continue.</div>{% endif %}</section>
+{% elif batch.status == 'running' %}
+<section class="batch-box"><h2>Start when you decide</h2>
+<div class="batch-alert batch-success">Confirmed; nothing sends automatically. Keep this page open while sending.</div>
+<p>One verified recipient per request, with server-side pacing. Closing the tab stops new requests, but an email already in progress may finish. Network uncertainty stops the sequence without retrying.</p>
+<div class="batch-form">
+<button class="batch-btn" type="button" id="start-delivery" {% if readiness %}disabled{% endif %}>Start Delivery</button>
+<button class="batch-btn batch-secondary" type="button" id="stop-browser" disabled>Stop on this page</button>
+<form method="post" action="{{ pause_url }}">{% csrf_token %}<button class="batch-btn batch-danger" type="submit">Pause batch</button></form>
+</div>
+<div class="batch-alert" id="delivery-events" role="status" aria-live="polite">Waiting for your Start Delivery click.</div>
+<p class="batch-muted">Refresh to see saved progress. Processing or uncertain messages require manual review and block automatic retries.</p></section>
+{% elif batch.status == 'paused' %}
+<section class="batch-box"><h2>Paused</h2><p>No further delivery can start without fresh confirmation. Resolve any uncertain message first.</p>
+{% if ready and not readiness %}<form method="post" action="{{ resume_url }}">{% csrf_token %}
+<div class="batch-form"><div><label for="resume-confirmation">Type {{ resume_phrase }} exactly</label>
+<input id="resume-confirmation" name="confirmation" type="text" autocomplete="off" required></div>
+<button class="batch-btn" type="submit">Resume (do not send)</button></div></form>{% endif %}</section>
+{% else %}
+<section class="batch-box"><h2>Batch complete</h2><p>There are no pending messages. Review individual statuses above.</p></section>
+{% endif %}{% endif %}
+<script src="{% static 'admin/js/milani_manual_batch.js' %}" defer
+data-step-url="{{ step_url|default:'' }}" data-max="20"></script>
+</div>
+{% endblock %}

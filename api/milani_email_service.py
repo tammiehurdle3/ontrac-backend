@@ -332,7 +332,12 @@ def _outreach_headers(message_id, from_email, *, v2, test=False):
 
 
 def _dispatch_outreach(creator: 'Creator', payload: dict):
-    """Final provider-call boundary: enforce exact address in local test mode."""
+    """Final provider-call boundary; normal disable flag cannot be bypassed."""
+    if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
+        from .milani_batch import scope_authorized
+        if not scope_authorized(creator) or payload.get('to') != [creator.email] or any(
+                payload.get(k) for k in ('cc', 'bcc')):
+            raise ValueError('Provider call denied: no verified manual batch scope.')
     if getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False):
         if (getattr(settings, 'ENVIRONMENT', '') != 'local' or
                 not getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False) or
@@ -350,8 +355,10 @@ def send_milani_outreach_email(creator: 'Creator') -> bool:
     Returns True on success, False on failure. Never raises.
     """
     if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
-        logger.warning('[Milani] Outbound sending disabled in this environment.')
-        return False
+        from .milani_batch import scope_authorized
+        if not scope_authorized(creator):
+            logger.warning('[Milani] Outbound sending disabled in this environment.')
+            return False
     if getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) and (
             getattr(settings, 'ENVIRONMENT', '') != 'local' or
             not getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False) or
@@ -465,8 +472,10 @@ def send_specific_milani_variant(creator: 'Creator', subject: str, body: str, *,
     Returns True on success, False on failure. Never raises.
     """
     if not getattr(settings, 'MILANI_OUTREACH_SEND_ENABLED', True):
-        logger.warning('[Milani] Test sending disabled in this environment.')
-        return False
+        from .milani_batch import scope_authorized
+        if not scope_authorized(creator, variant_id=variant_id):
+            logger.warning('[Milani] Test sending disabled in this environment.')
+            return False
     if getattr(settings, 'MILANI_OUTREACH_TEST_MODE', False) and (
             getattr(settings, 'ENVIRONMENT', '') != 'local' or
             not getattr(settings, 'MILANI_OUTREACH_V2_ENABLED', False) or

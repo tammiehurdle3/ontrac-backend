@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant, MilaniSuppression
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant, MilaniSuppression, MilaniLaunchBatch
 from django.shortcuts import get_object_or_404
 from django.urls import path as url_path, reverse
 from django.conf import settings
@@ -11,6 +11,7 @@ from .email_service import send_transactional_email, send_manual_custom_email
 
 # NEW: Import Milani Service and a Management Command utility
 from .milani_email_service import send_milani_outreach_email
+from .milani_batch_admin import creator_review_batch
 from django.core.management import call_command
 from django.utils import timezone
 from .views import convert_to_usd
@@ -907,7 +908,8 @@ class CreatorAdmin(admin.ModelAdmin):
     list_display = ('name', 'email', 'colored_status', 'do_not_contact', 'last_outreach', 'country', 'preview_and_send')
     list_filter = ('status', 'country')
     search_fields = ('name', 'email', 'country')
-    actions = [send_individual_outreach, queue_bulk_outreach]
+    actions = [creator_review_batch, send_individual_outreach, queue_bulk_outreach]
+    change_list_template = 'admin/api/creator/change_list.html'
     list_per_page = 50
     readonly_fields = ('outreach_panel',)
     fieldsets = (
@@ -1035,7 +1037,14 @@ class CreatorAdmin(admin.ModelAdmin):
         return super().response_change(request, obj)
 
     def get_urls(self):
+        from . import milani_batch_admin as mb
         custom = [
+            url_path('manual-batches/', self.admin_site.admin_view(mb.home), name='milani_batch_home'),
+            url_path('manual-batches/<uuid:batch_id>/', self.admin_site.admin_view(mb.review), name='milani_batch_review'),
+            url_path('manual-batches/<uuid:batch_id>/confirm/', self.admin_site.admin_view(mb.confirm), name='milani_batch_confirm'),
+            url_path('manual-batches/<uuid:batch_id>/step/', self.admin_site.admin_view(mb.step), name='milani_batch_step'),
+            url_path('manual-batches/<uuid:batch_id>/pause/', self.admin_site.admin_view(mb.pause), name='milani_batch_pause'),
+            url_path('manual-batches/<uuid:batch_id>/resume/', self.admin_site.admin_view(mb.resume), name='milani_batch_resume'),
             url_path(
                 'check-email/',
                 self.admin_site.admin_view(self.check_email_view),
@@ -2052,3 +2061,41 @@ class MilaniSuppressionAdmin(admin.ModelAdmin):
     def save_model(self, request, obj, form, change):
         obj.email = obj.email.strip().lower()
         super().save_model(request, obj, form, change)
+
+
+@admin.register(MilaniLaunchBatch)
+class MilaniLaunchBatchAdmin(admin.ModelAdmin):
+    """History and resume links, never an independent sending path."""
+    list_display = ('name', 'status', 'created_by', 'progress', 'created_at', 'review_link')
+    list_filter = ('status', 'created_at')
+    search_fields = ('name', 'created_by__username')
+    readonly_fields = ('id', 'name', 'status', 'variant', 'created_by',
+                       'created_at', 'confirmed_at', 'updated_at', 'progress',
+                       'review_link')
+    list_per_page = 35
+
+    def has_module_permission(self, request):
+        return request.user.is_superuser
+
+    def has_view_permission(self, request, obj=None):
+        return request.user.is_superuser
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
+
+    @admin.display(description='Progress')
+    def progress(self, obj):
+        done = obj.recipients.filter(status='sent').count()
+        total = obj.recipients.count()
+        return f'{done} sent / {total} selected'
+
+    @admin.display(description='Review / continue')
+    def review_link(self, obj):
+        return format_html('<a href="{}">Open safe batch console</a>',
+                           reverse('admin:milani_batch_review', args=[obj.pk]))
