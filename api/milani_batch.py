@@ -55,8 +55,12 @@ def prepare_draft(*, creator_ids, variant, operator):
     if len(selected) != len(ids):
         raise OutreachBlocked('A selected creator no longer exists. Review selection again.')
     with transaction.atomic():
+        variant = MilaniEmailVariant.objects.select_for_update().get(pk=variant.pk)
+        require_approved_variant(variant)
+        selected = Creator.objects.select_for_update().in_bulk(ids)
         batch = MilaniLaunchBatch.objects.create(
-            variant=variant, created_by=operator, name=variant.campaign_name)
+            variant=variant, created_by=operator, name=variant.campaign_name,
+            variant_revision_at=variant.updated_at)
         items = []
         for position, pk in enumerate(ids, 1):
             creator = selected[pk]
@@ -69,8 +73,8 @@ def prepare_draft(*, creator_ids, variant, operator):
                 subject, body = '', ''
             items.append(MilaniLaunchRecipient(
                 batch=batch, creator=creator, position=position,
-                status=state, reason=reason, subject_snapshot=subject,
-                body_snapshot=body))
+                status=state, reason=reason, recipient_email_snapshot=creator.email,
+                subject_snapshot=subject, body_snapshot=body))
         MilaniLaunchRecipient.objects.bulk_create(items)
     return batch
 
@@ -90,6 +94,14 @@ def confirm_batch(batch, operator, phrase):
         if err:
             raise OutreachBlocked(err)
         require_approved_variant(locked.variant)
+        if locked.variant_revision_at != locked.variant.updated_at:
+            raise OutreachBlocked('Campaign revision changed. Refresh & Re-review the batch.')
+        for item in locked.recipients.filter(status='pending').select_related('creator'):
+            current = prepare_approved_send(item.creator, variant=locked.variant)
+            if (item.recipient_email_snapshot.casefold() != item.creator.email.casefold() or
+                    item.subject_snapshot != current['subject'] or
+                    item.body_snapshot != current['body']):
+                raise OutreachBlocked('A prepared message is stale. Refresh & Re-review before confirmation.')
         locked.status = 'running'
         locked.confirmed_at = timezone.now()
         locked.save(update_fields=['status', 'confirmed_at', 'updated_at'])
@@ -136,9 +148,18 @@ def step_once(batch_id, operator):
                  .select_related('variant').get(pk=batch_id))
         if batch.created_by_id != operator.pk or batch.status != 'running':
             raise OutreachBlocked('Batch is not authorized or no longer running.')
-        require_approved_variant(batch.variant)
         if batch.recipients.filter(status__in=['processing', 'needs_review']).exists():
             raise OutreachBlocked('An earlier send needs manual reconciliation; no further automatic steps.')
+        try:
+            require_approved_variant(batch.variant)
+        except OutreachBlocked as exc:
+            batch.status = 'paused'
+            batch.save(update_fields=['status', 'updated_at'])
+            return {'state': 'refresh_required', 'reason': str(exc)}
+        if batch.variant_revision_at != batch.variant.updated_at:
+            batch.status = 'paused'
+            batch.save(update_fields=['status', 'updated_at'])
+            return {'state': 'refresh_required', 'reason': 'Campaign revision changed; re-review before continuing.'}
         gate, _ = MilaniBatchSendGate.objects.get_or_create(pk=1)
         gate = MilaniBatchSendGate.objects.select_for_update().get(pk=gate.pk)
         now = timezone.now()
@@ -155,8 +176,12 @@ def step_once(batch_id, operator):
         try:
             current = prepare_approved_send(item.creator, variant=batch.variant)
             if (current['subject'] != item.subject_snapshot or
-                    current['body'] != item.body_snapshot):
-                raise OutreachBlocked('Creator or campaign changed since review.')
+                    current['body'] != item.body_snapshot or
+                    item.recipient_email_snapshot.casefold() != item.creator.email.casefold()):
+                batch.status = 'paused'
+                batch.save(update_fields=['status', 'updated_at'])
+                return {'state': 'refresh_required', 'position': item.position,
+                        'reason': 'Creator details or greeting changed. Refresh & Re-review.'}
         except OutreachBlocked as error:
             item.status = 'blocked'
             item.reason = str(error)[:255]
@@ -220,10 +245,14 @@ def resume_batch(batch_id, operator, phrase):
         if issue:
             raise OutreachBlocked(issue)
         require_approved_variant(batch.variant)
+        if batch.variant_revision_at != batch.variant.updated_at:
+            raise OutreachBlocked('Campaign revision changed. Refresh & Re-review before resuming.')
         for item in remaining:
             data = prepare_approved_send(item.creator, variant=batch.variant)
-            if data['subject'] != item.subject_snapshot or data['body'] != item.body_snapshot:
-                raise OutreachBlocked('Creator or copy changed. Create and review a fresh batch.')
+            if (data['subject'] != item.subject_snapshot or
+                    data['body'] != item.body_snapshot or
+                    item.recipient_email_snapshot.casefold() != item.creator.email.casefold()):
+                raise OutreachBlocked('Creator or copy changed. Refresh & Re-review before resuming.')
         batch.status = 'running'
         batch.save(update_fields=['status', 'updated_at'])
         return batch

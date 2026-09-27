@@ -31,6 +31,12 @@
 .batch-pill.blocked,.batch-pill.needs_review{background:#fce6cf;color:#7e461f}
 .batch-muted{color:var(--body-quiet-color,#879389);font-size:13px}
 #delivery-events{white-space:pre-wrap;min-height:50px}
+.batch-diff{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:12px;margin:10px 0}
+.batch-diff-col{border:1px solid var(--hairline-color,#aabbb1);padding:13px;border-radius:8px;min-width:0}
+.batch-diff-col h3{font-size:14px;margin:0 0 9px;color:var(--body-fg,#222)}
+.batch-changed{border-left:5px solid #27895e}
+.batch-blocked{border-left:5px solid #be8136}
+.batch-copy{overflow:auto;max-height:380px}
 </style>{% endblock %}
 {% block content %}
 <div class="batch">
@@ -70,7 +76,18 @@
 <div class="batch-stat">Pending<strong>{{ ready }}</strong></div>
 <div class="batch-stat">Max recipients<strong>20</strong></div>
 <div class="batch-stat">Gap<strong>30s</strong></div></div>
-<p><a class="batch-btn batch-secondary" href="{{ home_url }}">New batch</a></p></section>
+{% if freshness_issue %}<div class="batch-alert"><strong>Re-review needed:</strong> {{ freshness_issue }}</div>
+{% elif freshness %}
+{% if freshness.changed_count or freshness.campaign_changed %}
+<div class="batch-alert"><strong>Saved messages need attention:</strong> {{ freshness.changed_count }} unsent recipient{{ freshness.changed_count|pluralize }} changed since review{% if freshness.campaign_changed %}; the approved campaign was also revised{% endif %}. Compare and approve updates before confirming or resuming.</div>
+{% else %}<div class="batch-alert batch-success">All unsent snapshots match the current approved campaign and Los Angeles greeting as of {{ freshness.date }}.</div>{% endif %}
+{% endif %}
+<p><a class="batch-btn batch-secondary" href="{{ home_url }}">New batch</a>
+{% if batch.status == 'draft' or batch.status == 'paused' %}
+<a class="batch-btn" href="{{ refresh_url }}">Refresh &amp; Re-review unsent emails</a>
+{% elif batch.status == 'running' %}
+<span class="batch-muted">To update messages during delivery, pause first, then refresh and re-review.</span>
+{% endif %}</p></section>
 <section class="batch-box"><h2>Review every individual message</h2>
 <p class="batch-muted">Frozen email snapshots from each creator record. Changes to a creator or campaign block delivery until reviewed.</p>
 {% for item in items %}
@@ -111,6 +128,40 @@
 {% else %}
 <section class="batch-box"><h2>Batch complete</h2><p>There are no pending messages. Review individual statuses above.</p></section>
 {% endif %}{% endif %}
+{% if page == 'refresh' %}
+<section class="batch-box"><h2>Refresh &amp; Re-review · {{ batch.name }}</h2>
+<p>The latest approved campaign, Los Angeles greeting and current creator records were checked. This preview makes <strong>no database changes</strong> and sends <strong>zero emails</strong>.</p>
+<p><strong>Current LA date:</strong> {{ plan.date }} · <strong>Recipients to re-review:</strong> {{ plan.rows|length }} · <strong>Changed:</strong> {{ plan.changed_count }}</p>
+{% if plan.campaign_changed %}<div class="batch-alert">The approved campaign revision or its name changed. Re-read all messages before applying updates. Current name: {{ plan.new_campaign_name }}.</div>{% endif %}
+<p class="batch-muted">Already-sent messages are preserved exactly; in-flight or uncertain deliveries must be resolved before refreshing.</p>
+</section>
+<section class="batch-box"><h2>Review old vs current wording</h2>
+{% for row in plan.rows %}
+<details class="batch-item {% if row.changed %}batch-changed{% endif %}" {% if row.changed %}open{% endif %}>
+<summary>{% if row.changed %}CHANGED{% else %}Unchanged{% endif %} · {{ row.item.position }}. {{ row.item.creator.name }} · {{ row.item.creator.email }}</summary>
+<div class="batch-diff">
+<div class="batch-diff-col"><h3>Previously approved snapshot</h3>
+<p><strong>Address:</strong> {{ row.previous.email|default:'Not recorded' }}<br><strong>Eligibility:</strong> {{ row.previous.status }}</p>
+{% if row.previous.reason %}<div class="batch-alert">{{ row.previous.reason }}</div>{% endif %}
+{% if row.previous.subject %}<p><strong>Subject:</strong> {{ row.previous.subject }}</p><div class="batch-copy">{{ row.previous.body }}</div>{% else %}<p class="batch-muted">No previous sendable message.</p>{% endif %}
+</div>
+<div class="batch-diff-col {% if row.revised.status == 'blocked' %}batch-blocked{% endif %}"><h3>Newly checked version</h3>
+<p><strong>Address:</strong> {{ row.revised.email }}<br><strong>Eligibility:</strong> {{ row.revised.status }}</p>
+{% if row.revised.reason %}<div class="batch-alert">{{ row.revised.reason }}</div>{% endif %}
+{% if row.revised.subject %}<p><strong>Subject:</strong> {{ row.revised.subject }}</p><div class="batch-copy">{{ row.revised.body }}</div>{% else %}<p class="batch-muted">This recipient is blocked and cannot be contacted.</p>{% endif %}
+</div></div></details>
+{% endfor %}
+</section>
+<section class="batch-box"><h2>Explicitly approve these refreshed snapshots</h2>
+<p>Approving updates only the <strong>unsent</strong> snapshot records. It does not confirm or resume the batch, change already-delivered messages, or send email. This preview expires after 15 minutes or when the LA date or records change.</p>
+<form method="post" action="{{ apply_url }}">{% csrf_token %}
+<input type="hidden" name="refresh_token" value="{{ plan.token }}">
+<div class="batch-form"><div><label for="refresh-confirmation">Type {{ refresh_phrase }} exactly</label>
+<input id="refresh-confirmation" type="text" name="confirmation" required autocomplete="off"></div>
+<button type="submit" class="batch-btn">Apply reviewed updates · no sending</button>
+<a href="{{ review_url }}" class="batch-btn batch-secondary">Cancel and keep old snapshots</a></div>
+</form></section>
+{% endif %}
 <script src="{% static 'admin/js/milani_manual_batch.js' %}" defer
 data-step-url="{{ step_url|default:'' }}" data-max="20"></script>
 </div>

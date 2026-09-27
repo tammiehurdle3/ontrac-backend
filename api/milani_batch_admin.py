@@ -7,6 +7,7 @@ from django.urls import reverse
 from .milani_batch import (OutreachBlocked, confirm_batch, pause_batch, resume_batch,
                            prepare_draft, readiness_error, step_once, MAX_RECIPIENTS)
 from .milani_outreach_v2 import eligible_variants
+from .milani_batch_refresh import apply_refresh, preview_refresh
 from .models import Creator, MilaniEmailVariant, MilaniLaunchBatch
 
 
@@ -73,9 +74,18 @@ def review(request, batch_id):
         return JsonResponse({'error': 'Superuser access required'}, status=403)
     items = list(batch.recipients.select_related('creator').order_by('position'))
     ready = sum(x.status == 'pending' for x in items)
+    freshness, freshness_issue = None, ''
+    if (batch.status in ('draft', 'paused') and
+            any(x.status in ('pending', 'blocked', 'processing', 'needs_review')
+                for x in items)):
+        try:
+            freshness = preview_refresh(batch, request.user)
+        except OutreachBlocked as exc:
+            freshness_issue = str(exc)
     return render(request, 'admin/api/creator/manual_batch.html', {
         'page': 'review', 'title': 'Review and launch batch',
         'batch': batch, 'items': items, 'ready': ready,
+        'freshness': freshness, 'freshness_issue': freshness_issue,
         'max_batch': MAX_RECIPIENTS, 'readiness': readiness_error(),
         'confirm_phrase': f'LAUNCH {ready}',
         'confirm_url': reverse('admin:milani_batch_confirm', args=[batch.pk]),
@@ -83,6 +93,7 @@ def review(request, batch_id):
         'pause_url': reverse('admin:milani_batch_pause', args=[batch.pk]),
         'resume_url': reverse('admin:milani_batch_resume', args=[batch.pk]),
         'resume_phrase': f'RESUME {ready}',
+        'refresh_url': reverse('admin:milani_batch_refresh', args=[batch.pk]),
         'home_url': reverse('admin:milani_batch_home'),
     })
 
@@ -157,3 +168,46 @@ def resume(request, batch_id):
     except OutreachBlocked as exc:
         messages.error(request, str(exc))
     return redirect('admin:milani_batch_review', batch.pk)
+
+
+def refresh_preview(request, batch_id):
+    """Always re-render from current creator/campaign data. No writes or sends."""
+    if request.method != 'GET':
+        return HttpResponseNotAllowed(['GET'])
+    batch = _batch_for_user(request, batch_id)
+    if not batch:
+        return JsonResponse({'error': 'Superuser access required'}, status=403)
+    try:
+        plan = preview_refresh(batch, request.user)
+    except OutreachBlocked as exc:
+        messages.error(request, str(exc))
+        return redirect('admin:milani_batch_review', batch.pk)
+    return render(request, 'admin/api/creator/manual_batch.html', {
+        'page': 'refresh', 'title': 'Refresh & Re-review prepared emails',
+        'batch': batch, 'plan': plan,
+        'apply_url': reverse('admin:milani_batch_refresh_apply', args=[batch.pk]),
+        'review_url': reverse('admin:milani_batch_review', args=[batch.pk]),
+        'refresh_phrase': f'REFRESH {len(plan["rows"])}',
+    })
+
+
+def refresh_apply(request, batch_id):
+    """Explicit approval of EXACT prior preview. Still does not confirm/send."""
+    if request.method != 'POST':
+        return HttpResponseNotAllowed(['POST'])
+    batch = _batch_for_user(request, batch_id)
+    if not batch:
+        return JsonResponse({'error': 'Superuser access required'}, status=403)
+    try:
+        count = batch.recipients.filter(status__in=['pending', 'blocked']).count()
+        if request.POST.get('confirmation') != f'REFRESH {count}':
+            raise OutreachBlocked(f'Type REFRESH {count} exactly to approve the updates.')
+        result = apply_refresh(batch.pk, request.user, request.POST.get('refresh_token', ''))
+        messages.success(request,
+                         f'Re-reviewed {count} unsent recipients. '
+                         f'{result["changed"]} changed. Nothing sent. '
+                         'Confirm or resume separately when ready.')
+        return redirect('admin:milani_batch_review', batch.pk)
+    except OutreachBlocked as exc:
+        messages.error(request, str(exc))
+        return redirect('admin:milani_batch_refresh', batch.pk)

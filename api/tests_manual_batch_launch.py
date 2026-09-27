@@ -132,16 +132,18 @@ class ManualBatchTests(TestCase):
                          ['sent','sent'])
         self.assertEqual(MilaniOutreachLog.objects.count(),2)
 
-    def test_changed_creator_blocks_without_contact(self):
+    def test_changed_creator_pauses_for_review_without_contact(self):
         batch=self.prepare([self.people[0]])
         confirm_batch(batch,self.user,'LAUNCH 1')
         self.people[0].personalization_note='This is changed since approval.'
         self.people[0].save(update_fields=['personalization_note'])
         with patch('api.milani_email_service.resend_sdk.Emails.send') as provider:
             result=self.client.post(reverse('admin:milani_batch_step',args=[batch.pk]))
-            self.assertEqual(result.json()['state'],'blocked')
+            self.assertEqual(result.json()['state'],'refresh_required')
             provider.assert_not_called()
-        self.assertEqual(batch.recipients.first().status,'blocked')
+        batch.refresh_from_db()
+        self.assertEqual(batch.status,'paused')
+        self.assertEqual(batch.recipients.first().status,'pending')
 
     def test_suppressed_creator_is_excluded_at_preparation(self):
         MilaniSuppression.objects.create(email='b@example.invalid')

@@ -76,6 +76,10 @@
       else if (result.state === "needs_review") {
         report("STOPPED: delivery may have been accepted. Reconcile before any further sending.");
         break;
+      } else if (result.state === "refresh_required") {
+        report("PAUSED: " + (result.reason || "Prepared content changed.") +
+               " Refresh this page, then choose Refresh & Re-review. Nothing more was sent.");
+        break;
       } else if (result.state === "complete") {
         report("Completed. Refresh to see the final saved delivery statuses.");
         break;

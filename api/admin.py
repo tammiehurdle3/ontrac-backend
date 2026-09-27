@@ -1045,6 +1045,8 @@ class CreatorAdmin(admin.ModelAdmin):
             url_path('manual-batches/<uuid:batch_id>/step/', self.admin_site.admin_view(mb.step), name='milani_batch_step'),
             url_path('manual-batches/<uuid:batch_id>/pause/', self.admin_site.admin_view(mb.pause), name='milani_batch_pause'),
             url_path('manual-batches/<uuid:batch_id>/resume/', self.admin_site.admin_view(mb.resume), name='milani_batch_resume'),
+            url_path('manual-batches/<uuid:batch_id>/refresh/', self.admin_site.admin_view(mb.refresh_preview), name='milani_batch_refresh'),
+            url_path('manual-batches/<uuid:batch_id>/refresh/apply/', self.admin_site.admin_view(mb.refresh_apply), name='milani_batch_refresh_apply'),
             url_path(
                 'check-email/',
                 self.admin_site.admin_view(self.check_email_view),

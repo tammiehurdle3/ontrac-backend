@@ -453,6 +453,10 @@ class MilaniLaunchBatch(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     confirmed_at = models.DateTimeField(blank=True, null=True)
     updated_at = models.DateTimeField(auto_now=True)
+    variant_revision_at = models.DateTimeField(
+        blank=True, null=True,
+        help_text='Exact campaign revision explicitly reviewed for unsent recipients.'
+    )
 
     class Meta:
         ordering = ['-created_at']
@@ -469,6 +473,7 @@ class MilaniLaunchRecipient(models.Model):
                               choices=[('pending','Pending'),('processing','Processing'),
                                        ('sent','Sent'),('blocked','Blocked'),
                                        ('needs_review','Needs Review')])
+    recipient_email_snapshot = models.EmailField(blank=True, default='')
     subject_snapshot = models.CharField(max_length=255, blank=True)
     body_snapshot = models.TextField(blank=True)
     reason = models.CharField(max_length=255, blank=True)
