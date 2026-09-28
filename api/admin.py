@@ -1508,9 +1508,10 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
   <div class="email-container">
     {body_html_inner}
     <p class="unsub-text">
-      You are receiving this email because we identified you as a great fit for our
-      upcoming campaigns. If you are not interested in brand partnerships at this time,
-      you can <a href="mailto:{from_email}?subject=Unsubscribe" class="unsub-link">unsubscribe here</a>.
+      <span style="display:block;line-height:1.55;">If you do not wish to receive future
+      outreach emails, you can unsubscribe below.</span>
+      <a href="mailto:{from_email}?subject=Unsubscribe" class="unsub-link"
+         style="display:inline-block;margin-top:8px;line-height:1.5;">Unsubscribe</a>
     </p>
     <img src="{pixel_url}" width="1" height="1" border="0"
          style="display:block;height:1px;width:1px;border:0;margin:0;padding:0;" alt="">
@@ -1522,7 +1523,8 @@ class MilaniEmailVariantAdmin(admin.ModelAdmin):
             from .milani_email_service import _build_html_body, _get_provider_config
             from_email = _get_provider_config()['from_email']
             # Preview uses exactly the sender HTML. Synthetic ID cannot log an open.
-            email_html = _build_html_body(body_rendered, '0' * 32, from_email)
+            email_html = _build_html_body(
+                body_rendered, '0' * 32, from_email, include_open_pixel=False)
 
         email_b64 = base64.b64encode(email_html.encode()).decode()
         updated_str = variant.updated_at.strftime('%b %d, %Y %H:%M UTC')

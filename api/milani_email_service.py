@@ -220,7 +220,7 @@ def _get_provider_config() -> dict:
     return _PROVIDER_CONFIG.get(provider_key) or _PROVIDER_CONFIG[_DEFAULT_PROVIDER]
 
 
-def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
+def _build_html_body(plain_body: str, message_id: str, from_email: str, *, include_open_pixel: bool = True) -> str:
     """
     Converts plain text to minimal, deliverability-safe HTML.
     Embeds a 1x1 open-tracking pixel keyed on message_id.
@@ -233,9 +233,14 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
         # Do not claim the public signed-unsubscribe endpoint has been deployed.
         from_email_safe = escape(from_email)
         footer_html = (
-            '<p class="unsub-text"><strong>Single-recipient test email.</strong> '
-            'No mailing list is enabled. To request no further messages, '
-            f'<a href="mailto:{from_email_safe}?subject=Unsubscribe">reply to unsubscribe</a>.'
+            '<p class="unsub-text">'
+            '<span style="display:block;line-height:1.55;">'
+            '<strong>Single-recipient test email.</strong> '
+            'No mailing list is enabled. To request no further messages,'
+            '</span>'
+            f'<a href="mailto:{from_email_safe}?subject=Unsubscribe" '
+            'class="unsub-link" style="display:inline-block;margin-top:8px;'
+            'line-height:1.5;">Reply to unsubscribe</a>'
             '</p>'
         )
         base_url = ''
@@ -246,18 +251,32 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
         if not postal or (getattr(settings, 'ENVIRONMENT', '') != 'local' and 'TEST-ONLY' in postal):
             raise ValueError('Verified sender postal address is required for live outreach.')
         from_email_safe = escape(from_email)
+        # Keep link and mailing address on their own mobile-safe lines.
+        # Never strand punctuation immediately after an unsubscribe link.
         footer_html = (
-            '<p class="unsub-text">You may stop future creator outreach at any time. '
-            f'<a href="{escape(unsub_url)}" class="unsub-link">Unsubscribe</a><br>'
-            f'{escape(postal)}</p>'
+            '<p class="unsub-text" style="overflow-wrap:break-word;">'
+            '<span style="display:block;line-height:1.55;">'
+            'You may stop future creator outreach at any time.'
+            '</span>'
+            f'<a href="{escape(unsub_url)}" class="unsub-link" '
+            'style="display:inline-block;margin-top:8px;line-height:1.5;">'
+            'Unsubscribe</a>'
+            '<span class="postal-address" style="display:block;margin-top:12px;'
+            f'line-height:1.5;overflow-wrap:break-word;">{escape(postal)}</span>'
+            '</p>'
         )
         base_url = getattr(settings, 'MILANI_PUBLIC_BASE_URL', '').rstrip('/')
     else:
         from_email_safe = escape(from_email)
         footer_html = (
-            '<p class="unsub-text">If you are not interested in future partnerships, '
+            '<p class="unsub-text">'
+            '<span style="display:block;line-height:1.55;">'
+            'If you are not interested in future partnerships,'
+            '</span>'
             f'<a href="mailto:{from_email_safe}?subject=Unsubscribe" '
-            'class="unsub-link">unsubscribe here</a>.</p>'
+            'class="unsub-link" style="display:inline-block;margin-top:8px;'
+            'line-height:1.5;">Unsubscribe here</a>'
+            '</p>'
         )
         base_url = getattr(settings, 'SHIELDCLIMB_CALLBACK_BASE_URL', '').rstrip('/')
     pixel_url = f"{base_url}/api/webhooks/milani-open/?mid={message_id}"
@@ -273,7 +292,9 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str) -> str:
             html_paragraphs.append(f'<p style="margin:0 0 16px 0;">{inner}</p>')
 
     body_html = '\n    '.join(html_paragraphs)
-    pixel_markup = '' if test_mode else (
+    # Preview should never show an orphan 1x1 image or trigger an open event.
+    # Real delivery keeps the existing tracking pixel unchanged.
+    pixel_markup = '' if (test_mode or not include_open_pixel) else (
         f'<img src="{pixel_url}" width="1" height="1" border="0" '
         'style="display:block;height:1px;width:1px;border:0;margin:0;padding:0;" alt="">'
     )
