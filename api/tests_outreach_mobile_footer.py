@@ -47,6 +47,9 @@ class MobileEmailFooterTests(TestCase):
         self.assertIn('prefers-color-scheme: dark', rendered)
         self.assertIn('overflow-wrap:break-word;', rendered)
         self.assertIn('/api/webhooks/milani-open/?mid=', rendered)
+        self.assertIn('aria-hidden="true"', rendered)
+        self.assertIn('max-height:0;overflow:hidden;line-height:0;font-size:0;', rendered)
+        self.assertIn('opacity:0;mso-hide:all;', rendered)
         headers = _outreach_headers(
             self.MESSAGE, 'diana@milanicollabs.com', v2=True,
         )

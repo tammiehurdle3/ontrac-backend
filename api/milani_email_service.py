@@ -295,8 +295,16 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str, *, inclu
     # Preview should never show an orphan 1x1 image or trigger an open event.
     # Real delivery keeps the existing tracking pixel unchanged.
     pixel_markup = '' if (test_mode or not include_open_pixel) else (
+        # Real emails retain the open pixel, but a zero-height clipping wrapper
+        # keeps mail clients from showing it as a stray dot BELOW the footer.
+        '<span aria-hidden="true" style="display:block;width:0;height:0;'
+        'max-height:0;overflow:hidden;line-height:0;font-size:0;'
+        'opacity:0;mso-hide:all;">'
         f'<img src="{pixel_url}" width="1" height="1" border="0" '
-        'style="display:block;height:1px;width:1px;border:0;margin:0;padding:0;" alt="">'
+        'style="display:block;width:1px;height:1px;max-width:1px;'
+        'max-height:1px;opacity:0;border:0;outline:0;'
+        'margin:0;padding:0;" alt="">'
+        '</span>'
     )
 
     return f"""<!DOCTYPE html>
