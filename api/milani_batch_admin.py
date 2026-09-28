@@ -21,7 +21,7 @@ def _home(request, *, error=''):
         if value.isdecimal() and int(value) > 0:
             ids.append(int(value))
     selected = set(ids[:MAX_RECIPIENTS])
-    creators = Creator.objects.all().order_by('name', 'pk')[:250]
+    creators = Creator.objects.all().order_by('-pk')[:250]
     return render(request, 'admin/api/creator/manual_batch.html', {
         'page': 'home', 'title': 'Manual creator batches', 'creators': creators,
         'selected': selected, 'variants': eligible_variants(),
@@ -48,7 +48,7 @@ def home(request):
     except (OutreachBlocked, ValueError, TypeError) as exc:
         return render(request, 'admin/api/creator/manual_batch.html', {
             'page': 'home', 'title': 'Manual creator batches',
-            'creators': Creator.objects.all().order_by('name', 'pk')[:250],
+            'creators': Creator.objects.all().order_by('-pk')[:250],
             'variants': eligible_variants(), 'selected': set(
                 int(x) for x in request.POST.getlist('creator_ids') if x.isdecimal()),
             'error': str(exc), 'max_batch': MAX_RECIPIENTS,
