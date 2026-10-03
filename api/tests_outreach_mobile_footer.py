@@ -34,8 +34,13 @@ class MobileEmailFooterTests(TestCase):
         self.assertIn(
             'Unsubscribe</a><span class="postal-address" '
             'style="display:block;margin-top:12px;line-height:1.5;'
-            'overflow-wrap:break-word;">New Milani Group LLC', rendered,
+            'overflow-wrap:break-word;">Milani Cosmetics, Inc.', rendered,
         )
+        self.assertIn(
+            'Milani Cosmetics, Inc., 10000 W. Washington Blvd, Suite 210, '
+            'Culver City, CA 90232, United States', rendered,
+        )
+        self.assertNotIn('New Milani Group LLC', rendered)
         self.assertNotIn('Unsubscribe</a>.', rendered)
         self.assertNotIn('unsubscribe here</a>.', rendered)
         self.assertRegex(

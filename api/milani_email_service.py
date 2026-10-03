@@ -251,6 +251,8 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str, *, inclu
         if not postal or (getattr(settings, 'ENVIRONMENT', '') != 'local' and 'TEST-ONLY' in postal):
             raise ValueError('Verified sender postal address is required for live outreach.')
         from_email_safe = escape(from_email)
+        postal_display = postal.replace(
+            'New Milani Group LLC', 'Milani Cosmetics, Inc.', 1)
         # Keep link and mailing address on their own mobile-safe lines.
         # Never strand punctuation immediately after an unsubscribe link.
         footer_html = (
@@ -262,7 +264,7 @@ def _build_html_body(plain_body: str, message_id: str, from_email: str, *, inclu
             'style="display:inline-block;margin-top:8px;line-height:1.5;">'
             'Unsubscribe</a>'
             '<span class="postal-address" style="display:block;margin-top:12px;'
-            f'line-height:1.5;overflow-wrap:break-word;">{escape(postal)}</span>'
+            f'line-height:1.5;overflow-wrap:break-word;">{escape(postal_display)}</span>'
             '</p>'
         )
         base_url = getattr(settings, 'MILANI_PUBLIC_BASE_URL', '').rstrip('/')
