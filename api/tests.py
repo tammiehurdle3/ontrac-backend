@@ -14,7 +14,7 @@ from .bachs_service import BachsService
 from .exchange_rate_service import ExchangeRateService
 from .models import BachsPaymentAttempt, Payment, Receipt, Shipment, SiteSettings
 from .serializers import ShipmentSerializer
-from .views import bachs_webhook, initiate_bachs_session
+from .views import _bachs_return_token, bachs_webhook, initiate_bachs_session
 
 
 def provider_response(rate=None, *, error=None, status_code=200):
@@ -352,6 +352,58 @@ class BachsFxIntegrationTests(TestCase):
         self.assertEqual(secondary_post.call_args.kwargs["headers"]["Authorization"], "Bearer sk_secondary")
         self.assertNotIn("metadata", secondary_post.call_args.kwargs["json"])
 
+    def test_reference_sent_to_bachs_never_contains_the_tracking_id(self):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "checkout_url": "https://sandbox-checkout.bachs.io/c/test",
+            "checkout_id": "chk_opaque",
+            "status": "open",
+        }
+
+        with patch("api.bachs_service.requests.post", return_value=response) as post:
+            returned = BachsService.create_checkout_session(
+                amount=Decimal("12.35"),
+                currency="USD",
+                tracking_id=self.shipment.trackingId,
+                shipment_id=self.shipment.id,
+                success_url="https://example.test/checkout/return/opaque?bachs_return=success",
+                cancel_url="https://example.test/checkout/return/opaque?bachs_return=cancelled",
+                payment_method_types=["USD_CARD"],
+                original_amount=self.shipment.paymentAmount,
+                original_currency=self.shipment.paymentCurrency,
+            )
+
+        payload = post.call_args.kwargs["json"]
+        self.assertTrue(payload["reference"].startswith("ontrac_"))
+        self.assertNotIn(self.shipment.trackingId, payload["reference"])
+        self.assertEqual(returned["_ontrac_reference"], payload["reference"])
+
+    def test_initiate_session_return_urls_are_opaque_and_resolvable(self):
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/opaque",
+                "checkout_id": "chk_opaque_return",
+                "status": "open",
+            }) as create:
+                request = self.factory.post(f"/api/initiate-bachs/{self.shipment.trackingId}/", {}, format="json")
+                response = initiate_bachs_session(request, self.shipment.trackingId)
+
+        self.assertEqual(response.status_code, 200)
+        kwargs = create.call_args.kwargs
+        for url in (kwargs["success_url"], kwargs["cancel_url"]):
+            self.assertNotIn(self.shipment.trackingId, url)
+            self.assertIn("/checkout/return/", url)
+
+        attempt = BachsPaymentAttempt.objects.get(checkout_id="chk_opaque_return")
+        self.assertNotIn(self.shipment.trackingId, attempt.reference)
+        token = _bachs_return_token(attempt.pk)
+        self.assertIn(token, kwargs["success_url"])
+
+        lookup = self.client.get(f"/api/bachs/return/{token}/")
+        self.assertEqual(lookup.status_code, 200)
+        self.assertEqual(json.loads(lookup.content)["tracking_id"], self.shipment.trackingId)
+
 
 @override_settings(
     BACHS_WEBHOOK_SECRET="whsec_test_only",
@@ -478,3 +530,73 @@ class BachsWebhookEventTests(TestCase):
         self.assertFalse(self.shipment.requiresPayment)
         self.assertEqual(attempt.status, "succeeded")
         self.assertTrue(Receipt.objects.get(shipment=self.shipment).is_visible)
+
+    @override_settings(BACHS_ACCOUNTS={
+        "default": {"label": "Default", "api_key": "sk_test", "webhook_secret": "whsec_test_only"},
+    })
+    def test_opaque_reference_webhook_reconciles_via_the_local_attempt(self):
+        attempt = BachsPaymentAttempt.objects.create(
+            shipment=self.shipment,
+            tracking_id=self.shipment.trackingId,
+            account_key="default",
+            reference="ontrac_b7f1c4d2e9a84c3fb6d5a1e2c3f4d5e6",
+            checkout_id="chk_opaque_webhook",
+            expected_amount=Decimal("88.63"),
+            expected_currency="USD",
+            original_amount=Decimal("77.26"),
+            original_currency="EUR",
+        )
+        payload = {
+            "id": "evt_opaque_reference_success",
+            "type": "collection.succeeded",
+            "data": {
+                "checkout_id": attempt.checkout_id,
+                "reference": attempt.reference,
+                "amount": "88.63",
+                "currency": "USD",
+            },
+        }
+        response = bachs_webhook(self._signed_request(payload))
+
+        self.assertEqual(response.status_code, 200)
+        self.shipment.refresh_from_db()
+        attempt.refresh_from_db()
+        self.assertFalse(self.shipment.requiresPayment)
+        self.assertEqual(attempt.status, "succeeded")
+
+    def test_unknown_opaque_reference_is_ignored(self):
+        payload = {
+            "id": "evt_unknown_opaque_reference",
+            "type": "collection.succeeded",
+            "data": {
+                "checkout_id": "chk_unknown",
+                "reference": "ontrac_do_not_match_any_attempt",
+                "amount": "88.63",
+                "currency": "USD",
+            },
+        }
+        response = bachs_webhook(self._signed_request(payload))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(json.loads(response.content)["status"], "ignored")
+        self.shipment.refresh_from_db()
+        self.assertTrue(self.shipment.requiresPayment)
+
+    def test_tampered_return_token_is_rejected(self):
+        attempt = BachsPaymentAttempt.objects.create(
+            shipment=self.shipment,
+            tracking_id=self.shipment.trackingId,
+            account_key="default",
+            reference="ontrac_0123456789abcdef0123456789abcdef",
+            checkout_id="chk_tampered_token",
+            expected_amount=Decimal("88.63"),
+            expected_currency="USD",
+            original_amount=Decimal("77.26"),
+            original_currency="EUR",
+        )
+        token = _bachs_return_token(attempt.pk)
+        tampered = token[:-1] + ("0" if token[-1] != "0" else "1")
+
+        response = self.client.get(f"/api/bachs/return/{tampered}/")
+
+        self.assertEqual(response.status_code, 404)

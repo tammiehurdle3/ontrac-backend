@@ -34,4 +34,12 @@ The webhook endpoint remains `/api/webhooks/bachs/`. Configure each merchant acc
 3. Select the named Bachs account and save.
 4. New checkout sessions use that account. Existing attempts retain their account key, so a later switch does not change which webhook secret is used to verify an already-started payment.
 
+## Opaque checkout references and return URLs
+
+The reference sent to Bachs is `ontrac_<random hex>` and never contains a tracking ID. The `success_url` and `cancel_url` point at the frontend route `/checkout/return/<signed token>`; the token is a signature over the local `BachsPaymentAttempt` primary key and reveals no shipment data. The frontend resolves it through `GET /api/bachs/return/<token>/` and only then navigates to `/checkout/<tracking id>`.
+
+Sessions created before this change keep the legacy `ontrac_<tracking id>_<random>` reference. Those references are still verified by their exact stored value, and the tracking-ID prefix check only runs when no local attempt exists.
+
+Deploy the frontend build that contains the `/checkout/return/:returnToken` route **before** the backend build that starts emitting these URLs.
+
 The customer-facing checkout route and USD conversion remain unchanged. Payment confirmation requires a valid signed webhook and the locally stored payment attempt or the legacy metadata path. Metadata omission should only be enabled for an account after confirming the Bachs API supports it and verifying that the event still provides a reliable reference/checkout ID for reconcilation.

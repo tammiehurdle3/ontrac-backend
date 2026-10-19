@@ -30,6 +30,7 @@ class BachsService:
         original_amount=None,
         original_currency=None,
         account_config=None,
+        reference=None,
     ):
         account_config = account_config or {
             'api_key': settings.BACHS_API_KEY,
@@ -39,7 +40,11 @@ class BachsService:
         api_base_url = account_config.get('api_base_url') or settings.BACHS_API_BASE_URL
         if not api_key:
             raise RuntimeError("The selected Bachs account has no API key configured")
-        reference = f"ontrac_{tracking_id}_{uuid.uuid4().hex[:12]}"
+        # This reference is sent to Bachs and shows up in their dashboard/logs,
+        # so it stays opaque: a tracking ID is the public capability for the
+        # tracking page and must never be embedded here. Callers that need to
+        # build return URLs or pre-store a payment attempt pass their own value.
+        reference = reference or f"ontrac_{uuid.uuid4().hex}"
         checkout_amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         payload = {
             "pricing": {

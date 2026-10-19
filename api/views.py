@@ -10,6 +10,8 @@ from .email_service import send_admin_notification, send_manual_custom_email
 from django.db import transaction
 from django.core.cache import cache
 
+import hashlib
+import hmac
 import json
 import pusher
 from django.conf import settings
@@ -826,6 +828,33 @@ def bcon_webhook(request):
 # BACHS PAYMENT INTEGRATION VIEWS
 # ============================================================================
 
+def _bachs_return_token(attempt_id):
+    """Build the opaque, signed token used in Bachs success/cancel return URLs."""
+    signature = hmac.new(
+        str(settings.SECRET_KEY).encode('utf-8'),
+        f'bachs-return:{attempt_id}'.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()
+    return f"{attempt_id}.{signature}"
+
+
+def _bachs_attempt_from_return_token(token):
+    """Return the local payment attempt referenced by a signed return token."""
+    try:
+        attempt_id, signature = str(token).split('.', 1)
+        int(attempt_id)
+    except (TypeError, ValueError):
+        return None
+    expected = hmac.new(
+        str(settings.SECRET_KEY).encode('utf-8'),
+        f'bachs-return:{attempt_id}'.encode('utf-8'),
+        hashlib.sha256,
+    ).hexdigest()
+    if not hmac.compare_digest(expected, signature):
+        return None
+    return BachsPaymentAttempt.objects.filter(pk=attempt_id).first()
+
+
 @api_view(['POST'])
 def initiate_bachs_session(request, tracking_id):
     """Create a Bachs hosted checkout session for one shipment."""
@@ -855,36 +884,54 @@ def initiate_bachs_session(request, tracking_id):
         if account_key not in account_map:
             account_key = next(iter(account_map), 'default')
         account_config = account_map.get(account_key) or {}
-        session = BachsService.create_checkout_session(
-            amount=checkout_amount,
-            currency='USD',
-            tracking_id=shipment.trackingId,
-            shipment_id=shipment.id,
-            success_url=f"{frontend_url}/checkout/{shipment.trackingId}?bachs_return=success",
-            cancel_url=f"{frontend_url}/checkout/{shipment.trackingId}?bachs_return=cancelled",
-            customer_email=shipment.recipient_email,
-            customer_name=shipment.recipient_name,
-            payment_description=shipment.paymentDescription,
-            payment_method_types=['USD_CARD'],
-            original_amount=shipment.paymentAmount,
-            original_currency=shipment.paymentCurrency,
-            account_config=account_config,
-        )
 
-        reference = str(session.get('reference') or session.get('_ontrac_reference') or '')
-        if not reference:
-            raise RuntimeError('Bachs checkout response did not include a reconciliation reference')
-        BachsPaymentAttempt.objects.create(
+        # Store the attempt before creating the hosted session: the opaque return
+        # token is derived from the attempt primary key, so nothing sent to Bachs
+        # (reference, success URL, cancel URL) contains the tracking ID.
+        reference = f"ontrac_{uuid.uuid4().hex}"
+        attempt = BachsPaymentAttempt.objects.create(
             shipment=shipment,
             tracking_id=shipment.trackingId,
             account_key=account_key,
             reference=reference,
-            checkout_id=session.get('checkout_id') or None,
             expected_amount=Decimal(str(checkout_amount)).quantize(Decimal('0.01')),
             expected_currency='USD',
             original_amount=shipment.paymentAmount,
             original_currency=shipment.paymentCurrency.upper(),
         )
+        return_token = _bachs_return_token(attempt.pk)
+
+        try:
+            session = BachsService.create_checkout_session(
+                amount=checkout_amount,
+                currency='USD',
+                tracking_id=shipment.trackingId,
+                shipment_id=shipment.id,
+                success_url=f"{frontend_url}/checkout/return/{return_token}?bachs_return=success",
+                cancel_url=f"{frontend_url}/checkout/return/{return_token}?bachs_return=cancelled",
+                customer_email=shipment.recipient_email,
+                customer_name=shipment.recipient_name,
+                payment_description=shipment.paymentDescription,
+                payment_method_types=['USD_CARD'],
+                original_amount=shipment.paymentAmount,
+                original_currency=shipment.paymentCurrency,
+                account_config=account_config,
+                reference=reference,
+            )
+        except Exception:
+            # Do not leave a dangling pending attempt when no session was created.
+            attempt.delete()
+            raise
+
+        # Bachs normally echoes the reference it was sent; keep whatever it
+        # returned so the signed webhook matches the provider payload exactly.
+        resolved_reference = str(session.get('reference') or session.get('_ontrac_reference') or reference)
+        attempt.checkout_id = session.get('checkout_id') or None
+        update_fields = ['checkout_id', 'updated_at']
+        if resolved_reference and resolved_reference != attempt.reference:
+            attempt.reference = resolved_reference
+            update_fields.append('reference')
+        attempt.save(update_fields=update_fields)
 
         return Response({
             'success': True,
@@ -980,7 +1027,11 @@ def bachs_webhook(request):
     if metadata_shipment_id and metadata_shipment_id != str(shipment.id):
         logger.warning(f"Ignoring Bachs event with shipment ID mismatch for {tracking_id}")
         return JsonResponse({'status': 'ignored'}, status=200)
-    if reference and not reference.startswith(f"ontrac_{tracking_id}_"):
+    if attempt is None and reference and not reference.startswith(f"ontrac_{tracking_id}_"):
+        # Sessions created before local attempts were stored put the tracking ID
+        # in the reference; that legacy shape is only checked when no attempt row
+        # exists. Attempts are matched by exact reference/checkout ID above, so
+        # opaque references are accepted for everything created since.
         logger.warning(f"Ignoring Bachs event with reference mismatch for {tracking_id}")
         return JsonResponse({'status': 'ignored'}, status=200)
 
@@ -1098,6 +1149,19 @@ def bachs_webhook(request):
         f"checkout={data.get('checkout_id')} charge={data.get('charge_id')}"
     )
     return JsonResponse({'status': 'success', 'tracking_id': tracking_id}, status=200)
+
+
+@require_http_methods(["GET"])
+def bachs_return_lookup(request, token):
+    """Resolve a signed Bachs return token to the shipment tracking ID.
+
+    The frontend calls this after Bachs redirects the customer back, so the
+    success/cancel URLs handed to Bachs never have to contain a tracking ID.
+    """
+    attempt = _bachs_attempt_from_return_token(token)
+    if attempt is None:
+        return JsonResponse({'error': 'Unknown return token'}, status=404)
+    return JsonResponse({'tracking_id': attempt.tracking_id})
 
 
 # ============================================================================
