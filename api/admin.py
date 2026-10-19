@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant, MilaniSuppression, MilaniLaunchBatch
+from .models import Shipment, Payment, SentEmail, Voucher, Receipt, Creator, MilaniOutreachLog, RefundBalance, SiteSettings, ScheduledAction, MilaniEmailVariant, MilaniSuppression, MilaniLaunchBatch, BachsMerchantAccount
 from django.shortcuts import get_object_or_404
 from django.urls import path as url_path, reverse
 from django.conf import settings
@@ -15,6 +15,7 @@ from .milani_batch_admin import creator_review_batch
 from django.core.management import call_command
 from django.utils import timezone
 from .views import convert_to_usd
+from .bachs_accounts import account_choices, credentials_key_configured
 import uuid
 from django.db.models import Case, When, Value  
 from django.utils.html import format_html
@@ -2124,6 +2125,84 @@ window.addEventListener('load', () => {{
         return HttpResponse(status=405)
 
 
+class BachsMerchantAccountForm(forms.ModelForm):
+    api_key = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={'autocomplete': 'new-password'}),
+        help_text='Leave blank to keep the stored API key.',
+    )
+    webhook_secret = forms.CharField(
+        required=False,
+        widget=forms.PasswordInput(render_value=False, attrs={'autocomplete': 'new-password'}),
+        help_text='Leave blank to keep the stored webhook secret.',
+    )
+
+    class Meta:
+        model = BachsMerchantAccount
+        fields = ('key', 'label', 'api_base_url', 'frontend_url', 'include_metadata', 'is_active')
+
+    def clean(self):
+        cleaned = super().clean()
+        new_secret = bool(cleaned.get('api_key') or cleaned.get('webhook_secret'))
+        if new_secret and not credentials_key_configured():
+            raise forms.ValidationError(
+                'Set BACHS_CREDENTIALS_KEY in the environment before storing merchant credentials.'
+            )
+        if not self.instance.pk and not cleaned.get('api_key'):
+            raise forms.ValidationError('An API key is required for a new merchant account.')
+        return cleaned
+
+    def save(self, commit=True):
+        merchant = super().save(commit=False)
+        if self.cleaned_data.get('api_key'):
+            merchant.set_api_key(self.cleaned_data['api_key'])
+        if self.cleaned_data.get('webhook_secret'):
+            merchant.set_webhook_secret(self.cleaned_data['webhook_secret'])
+        if commit:
+            merchant.save()
+        return merchant
+
+
+@admin.register(BachsMerchantAccount)
+class BachsMerchantAccountAdmin(admin.ModelAdmin):
+    form = BachsMerchantAccountForm
+    list_display = (
+        'label', 'key', 'api_base_url', 'frontend_url',
+        'include_metadata', 'is_active', 'has_api_key', 'has_webhook_secret',
+    )
+    list_filter = ('is_active', 'include_metadata')
+    search_fields = ('label', 'key')
+    readonly_fields = ('credential_status', 'created_at', 'updated_at')
+    fieldsets = (
+        ('Account', {
+            'fields': ('key', 'label', 'is_active'),
+            'description': 'Deactivate instead of deleting while payments may still be in flight.',
+        }),
+        ('Bachs API', {
+            'fields': ('api_base_url', 'api_key', 'credential_status'),
+            'description': 'Credentials are encrypted with BACHS_CREDENTIALS_KEY before they are stored.',
+        }),
+        ('Webhook', {
+            'fields': ('webhook_secret',),
+            'description': 'Must match the webhook secret configured for this account in Bachs.',
+        }),
+        ('Checkout', {
+            'fields': ('frontend_url', 'include_metadata'),
+            'description': 'Leave the return domain blank to use BACHS_FRONTEND_URL.',
+        }),
+        ('Timestamps', {'fields': ('created_at', 'updated_at')}),
+    )
+
+    def credential_status(self, obj):
+        if not obj or not obj.pk:
+            return '-'
+        api_key = 'API key set' if obj.has_api_key else 'API key missing'
+        webhook = 'webhook secret set' if obj.has_webhook_secret else 'webhook secret missing'
+        return format_html('{} &middot; {}', api_key, webhook)
+
+    credential_status.short_description = 'Credentials'
+
+
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
     list_display = ('__str__', 'email_provider', 'milani_smtp_provider', 'ai_provider', 'bachs_account')
@@ -2153,13 +2232,16 @@ class SiteSettingsAdmin(admin.ModelAdmin):
 
     def get_form(self, request, obj=None, **kwargs):
         form = super().get_form(request, obj, **kwargs)
-        account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
-        choices = [(key, str(value.get('label') or key)) for key, value in account_map.items()]
+        choices = account_choices()
         if not choices:
             choices = [('default', 'Current Bachs account')]
-        form.base_fields['bachs_account'].choices = choices
+        field = form.base_fields['bachs_account']
+        field.choices = choices
+        # The model field has no static choices, so ModelForm builds a TextInput;
+        # replace it so the account selector is a real dropdown.
+        field.widget = forms.Select(choices=choices)
         if obj and choices and obj.bachs_account not in {key for key, _label in choices}:
-            form.base_fields['bachs_account'].initial = choices[0][0]
+            field.initial = choices[0][0]
         return form
 
     def has_add_permission(self, request):

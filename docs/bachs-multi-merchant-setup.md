@@ -59,4 +59,16 @@ An account may set an optional `frontend_url`; it overrides `BACHS_FRONTEND_URL`
 
 Use the same value in the Bachs dashboard as the account's website/return host where that field is requested, and register that account's webhook at the endpoint you control.
 
+### Managing merchants in Django Admin
+
+Merchants can also be created and edited under **Django Admin → Bachs merchant accounts**. Credentials are encrypted at rest with `BACHS_CREDENTIALS_KEY`. Generate a Fernet key once and add it to Railway:
+
+```bash
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+```
+
+Without that variable the admin refuses to store credentials, while `BACHS_ACCOUNTS_JSON` accounts keep working. If the key is lost or replaced, stored credentials cannot be decrypted and must be re-entered.
+
+Admin accounts override `BACHS_ACCOUNTS_JSON` entries that use the same key. Deactivate an account instead of deleting it while payments may still be in flight, because pending attempts reference the key.
+
 The customer-facing checkout route and USD conversion remain unchanged. Payment confirmation requires a valid signed webhook and the locally stored payment attempt or the legacy metadata path. Metadata omission should only be enabled for an account after confirming the Bachs API supports it and verifying that the event still provides a reliable reference/checkout ID for reconcilation.

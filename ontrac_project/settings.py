@@ -249,6 +249,10 @@ BACHS_API_BASE_URL = env('BACHS_API_BASE_URL', default='https://sandbox-api.bach
 BACHS_WEBHOOK_SECRET = env('BACHS_WEBHOOK_SECRET', default='')
 BACHS_FRONTEND_URL = env('BACHS_FRONTEND_URL', default='http://localhost:5173')
 
+# Encrypts admin-managed Bachs merchant credentials at rest. Generate once with
+# cryptography.fernet.Fernet.generate_key() and keep it in Railway only.
+BACHS_CREDENTIALS_KEY = env('BACHS_CREDENTIALS_KEY', default='')
+
 # Optional named merchant accounts. Keep API keys and webhook secrets in Railway
 # environment variables; SiteSettings stores only the selected account key.
 try:

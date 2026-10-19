@@ -41,6 +41,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 from .shieldclimb_service import ShieldClimbService
 from .bachs_service import BachsService
+from .bachs_accounts import get_account_config, get_account_keys
 from .exchange_rate_service import ExchangeRateService
 from decimal import Decimal
 import urllib.parse
@@ -878,11 +879,11 @@ def initiate_bachs_session(request, tracking_id):
             )
 
         site_settings, _ = SiteSettings.objects.get_or_create(pk=1)
-        account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
+        account_keys = get_account_keys()
         account_key = site_settings.bachs_account
-        if account_key not in account_map:
-            account_key = next(iter(account_map), 'default')
-        account_config = account_map.get(account_key) or {}
+        if account_key not in account_keys:
+            account_key = account_keys[0] if account_keys else 'default'
+        account_config = get_account_config(account_key) or {}
         # Optional per-account return domain. It lets a merchant account send
         # Bachs back to a payment-specific domain while customers still finish
         # on the OnTrac checkout; that domain only has to forward the
@@ -979,9 +980,8 @@ def bachs_webhook(request):
     if attempt is None and candidate_checkout_id:
         attempt = BachsPaymentAttempt.objects.filter(checkout_id=candidate_checkout_id).first()
 
-    account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
     if attempt:
-        account_config = account_map.get(attempt.account_key) or {}
+        account_config = get_account_config(attempt.account_key) or {}
         secret = account_config.get('webhook_secret') or ''
     else:
         # Backwards compatibility for sessions created before local attempts were stored.

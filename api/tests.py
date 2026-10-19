@@ -12,7 +12,8 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from .bachs_service import BachsService
 from .exchange_rate_service import ExchangeRateService
-from .models import BachsPaymentAttempt, Payment, Receipt, Shipment, SiteSettings
+from .bachs_accounts import account_choices
+from .models import BachsMerchantAccount, BachsPaymentAttempt, Payment, Receipt, Shipment, SiteSettings
 from .serializers import ShipmentSerializer
 from .views import _bachs_return_token, bachs_webhook, initiate_bachs_session
 
@@ -626,3 +627,185 @@ class BachsWebhookEventTests(TestCase):
         response = self.client.get(f"/api/bachs/return/{tampered}/")
 
         self.assertEqual(response.status_code, 404)
+
+
+TEST_CREDENTIALS_KEY = 'MDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDAwMDA='
+
+
+@override_settings(BACHS_CREDENTIALS_KEY=TEST_CREDENTIALS_KEY)
+class BachsAdminManagedAccountTests(TestCase):
+    def setUp(self):
+        self.factory = APIRequestFactory()
+        self.shipment = Shipment.objects.create(
+            trackingId="OTADMIN0001",
+            recipient_name="Admin Managed",
+            recipient_email="admin-managed@example.com",
+            paymentAmount=Decimal("77.26"),
+            paymentCurrency="EUR",
+            paymentDescription="Import Duties",
+            requiresPayment=True,
+            status="Held for Payment",
+        )
+
+    def _merchant(self, **overrides):
+        values = {
+            "key": "admin_test",
+            "label": "Admin Test",
+            "api_base_url": "https://sandbox-api.bachs.io",
+            "include_metadata": False,
+        }
+        values.update(overrides)
+        merchant = BachsMerchantAccount(**values)
+        merchant.set_api_key("sk_admin_test")
+        merchant.set_webhook_secret("whsec_admin_test")
+        merchant.save()
+        return merchant
+
+    def _signed_request(self, payload, secret="whsec_admin_test"):
+        raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
+        timestamp = str(int(time.time()))
+        digest = hmac.new(
+            secret.encode("utf-8"),
+            timestamp.encode("ascii") + b"." + raw,
+            hashlib.sha256,
+        ).hexdigest()
+        return self.factory.post(
+            "/api/webhooks/bachs/",
+            data=raw,
+            content_type="application/json",
+            HTTP_X_BACHS_SIGNATURE_V2=f"t={timestamp},v1={digest}",
+        )
+
+    def test_credentials_are_encrypted_at_rest(self):
+        merchant = self._merchant()
+        merchant.refresh_from_db()
+
+        self.assertNotIn("sk_admin_test", merchant.api_key_encrypted)
+        self.assertNotIn("whsec_admin_test", merchant.webhook_secret_encrypted)
+        self.assertEqual(merchant.get_api_key(), "sk_admin_test")
+        self.assertEqual(merchant.get_webhook_secret(), "whsec_admin_test")
+
+    def test_admin_account_is_used_for_checkout_and_return_domain(self):
+        merchant = self._merchant(frontend_url="https://pay.example.test")
+        SiteSettings.objects.update_or_create(pk=1, defaults={"bachs_account": merchant.key})
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/admin",
+                "checkout_id": "chk_admin_account",
+                "status": "open",
+            }) as create:
+                response = initiate_bachs_session(self.factory.post("/"), self.shipment.trackingId)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(create.call_args.kwargs["account_config"]["api_key"], "sk_admin_test")
+        self.assertTrue(
+            create.call_args.kwargs["success_url"].startswith("https://pay.example.test/checkout/return/")
+        )
+
+    def test_admin_account_webhook_secret_is_used(self):
+        merchant = self._merchant()
+        attempt = BachsPaymentAttempt.objects.create(
+            shipment=self.shipment,
+            tracking_id=self.shipment.trackingId,
+            account_key=merchant.key,
+            reference="ontrac_admin_managed_reference",
+            checkout_id="chk_admin_managed",
+            expected_amount=Decimal("88.63"),
+            expected_currency="USD",
+            original_amount=Decimal("77.26"),
+            original_currency="EUR",
+        )
+        payload = {
+            "id": "evt_admin_managed",
+            "type": "collection.succeeded",
+            "data": {
+                "checkout_id": attempt.checkout_id,
+                "reference": attempt.reference,
+                "amount": "88.63",
+                "currency": "USD",
+            },
+        }
+        response = bachs_webhook(self._signed_request(payload))
+
+        self.assertEqual(response.status_code, 200)
+        self.shipment.refresh_from_db()
+        attempt.refresh_from_db()
+        self.assertFalse(self.shipment.requiresPayment)
+        self.assertEqual(attempt.status, "succeeded")
+
+    def test_admin_accounts_appear_in_the_site_settings_choices(self):
+        merchant = self._merchant()
+
+        choices = dict(account_choices())
+
+        self.assertEqual(choices.get(merchant.key), "Admin Test")
+        self.assertIn("default", choices)
+
+    def test_admin_form_requires_an_api_key_for_new_accounts(self):
+        from .admin import BachsMerchantAccountForm
+
+        form = BachsMerchantAccountForm(data={
+            "key": "no_key_account",
+            "label": "No key",
+            "api_base_url": "https://sandbox-api.bachs.io",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("__all__", form.errors)
+
+    def test_admin_form_saves_encrypted_credentials(self):
+        from .admin import BachsMerchantAccountForm
+
+        form = BachsMerchantAccountForm(data={
+            "key": "form_account",
+            "label": "Form account",
+            "api_base_url": "https://sandbox-api.bachs.io",
+            "frontend_url": "https://pay.example.test",
+            "include_metadata": "on",
+            "is_active": "on",
+            "api_key": "sk_form_test",
+            "webhook_secret": "whsec_form_test",
+        })
+        self.assertTrue(form.is_valid(), form.errors)
+
+        merchant = form.save()
+        merchant.refresh_from_db()
+
+        self.assertEqual(merchant.get_api_key(), "sk_form_test")
+        self.assertEqual(merchant.get_webhook_secret(), "whsec_form_test")
+        self.assertTrue(merchant.is_active)
+        self.assertNotIn("sk_form_test", merchant.api_key_encrypted)
+
+    def test_admin_add_page_renders(self):
+        user = User.objects.create_superuser("admin-page", "admin-page@example.com", "pw")
+        self.client.force_login(user)
+
+        response = self.client.get("/admin/api/bachsmerchantaccount/add/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Webhook")
+
+    def test_site_settings_page_lists_admin_accounts(self):
+        merchant = self._merchant()
+        SiteSettings.objects.get_or_create(pk=1)
+        user = User.objects.create_superuser("admin-page-two", "admin-page-two@example.com", "pw")
+        self.client.force_login(user)
+
+        response = self.client.get("/admin/api/sitesettings/1/change/")
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, merchant.key)
+
+    @override_settings(BACHS_CREDENTIALS_KEY="")
+    def test_admin_form_refuses_credentials_without_the_encryption_key(self):
+        from .admin import BachsMerchantAccountForm
+
+        form = BachsMerchantAccountForm(data={
+            "key": "no_encryption_key",
+            "label": "No key",
+            "api_base_url": "https://sandbox-api.bachs.io",
+            "api_key": "sk_no_key",
+        })
+
+        self.assertFalse(form.is_valid())
+        self.assertIn("BACHS_CREDENTIALS_KEY", str(form.errors))

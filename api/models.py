@@ -1,4 +1,5 @@
 from django.db import models
+from .bachs_accounts import decrypt_secret, encrypt_secret
 from django.contrib.auth.models import User
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
@@ -456,6 +457,69 @@ class BachsPaymentAttempt(models.Model):
 
     def __str__(self):
         return f'{self.tracking_id} · {self.account_key} · {self.status}'
+
+
+class BachsMerchantAccount(models.Model):
+    """Admin-managed Bachs merchant account; credentials are encrypted at rest."""
+
+    key = models.SlugField(
+        max_length=100,
+        unique=True,
+        help_text='Stable identifier used by payment attempts and Site Settings.',
+    )
+    label = models.CharField(max_length=150)
+    api_key_encrypted = models.TextField(blank=True)
+    webhook_secret_encrypted = models.TextField(blank=True)
+    api_base_url = models.URLField(default='https://sandbox-api.bachs.io')
+    frontend_url = models.URLField(
+        blank=True,
+        help_text='Optional return domain used for this account. Blank uses BACHS_FRONTEND_URL.',
+    )
+    include_metadata = models.BooleanField(
+        default=False,
+        help_text='Send tracking metadata to Bachs. Keep off to keep tracking IDs out of Bachs.',
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['label']
+        verbose_name = 'Bachs merchant account'
+        verbose_name_plural = 'Bachs merchant accounts'
+
+    def __str__(self):
+        return f'{self.label} ({self.key})'
+
+    def set_api_key(self, value):
+        self.api_key_encrypted = encrypt_secret(value)
+
+    def set_webhook_secret(self, value):
+        self.webhook_secret_encrypted = encrypt_secret(value)
+
+    def get_api_key(self):
+        return decrypt_secret(self.api_key_encrypted)
+
+    def get_webhook_secret(self):
+        return decrypt_secret(self.webhook_secret_encrypted)
+
+    @property
+    def has_api_key(self):
+        return bool(self.api_key_encrypted)
+
+    @property
+    def has_webhook_secret(self):
+        return bool(self.webhook_secret_encrypted)
+
+    def as_config(self):
+        return {
+            'label': self.label,
+            'api_key': self.get_api_key(),
+            'webhook_secret': self.get_webhook_secret(),
+            'api_base_url': self.api_base_url,
+            'frontend_url': self.frontend_url,
+            'include_metadata': self.include_metadata,
+        }
 
 
 class MilaniSuppression(models.Model):
