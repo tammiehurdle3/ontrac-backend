@@ -877,13 +877,19 @@ def initiate_bachs_session(request, tracking_id):
                 status=status.HTTP_503_SERVICE_UNAVAILABLE
             )
 
-        frontend_url = settings.BACHS_FRONTEND_URL.rstrip('/')
         site_settings, _ = SiteSettings.objects.get_or_create(pk=1)
         account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
         account_key = site_settings.bachs_account
         if account_key not in account_map:
             account_key = next(iter(account_map), 'default')
         account_config = account_map.get(account_key) or {}
+        # Optional per-account return domain. It lets a merchant account send
+        # Bachs back to a payment-specific domain while customers still finish
+        # on the OnTrac checkout; that domain only has to forward the
+        # /checkout/return/<token> path to the OnTrac frontend.
+        frontend_url = str(
+            account_config.get('frontend_url') or settings.BACHS_FRONTEND_URL
+        ).rstrip('/')
 
         # Store the attempt before creating the hosted session: the opaque return
         # token is derived from the attempt primary key, so nothing sent to Bachs

@@ -404,6 +404,32 @@ class BachsFxIntegrationTests(TestCase):
         self.assertEqual(lookup.status_code, 200)
         self.assertEqual(json.loads(lookup.content)["tracking_id"], self.shipment.trackingId)
 
+    @override_settings(BACHS_ACCOUNTS={
+        "primary": {"label": "Primary", "api_key": "sk_primary", "webhook_secret": "whsec_primary"},
+        "payments": {
+            "label": "Payments domain",
+            "api_key": "sk_payments",
+            "webhook_secret": "whsec_payments",
+            "frontend_url": "https://pay.example.test/",
+        },
+    })
+    def test_account_frontend_url_overrides_the_global_return_domain(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={"bachs_account": "payments"})
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/payments",
+                "checkout_id": "chk_payments_domain",
+                "status": "open",
+            }) as create:
+                request = self.factory.post(f"/api/initiate-bachs/{self.shipment.trackingId}/", {}, format="json")
+                response = initiate_bachs_session(request, self.shipment.trackingId)
+
+        self.assertEqual(response.status_code, 200)
+        success_url = create.call_args.kwargs["success_url"]
+        self.assertTrue(success_url.startswith("https://pay.example.test/checkout/return/"))
+        self.assertIn("bachs_return=success", success_url)
+        self.assertEqual(create.call_args.kwargs["account_config"]["api_key"], "sk_payments")
+
 
 @override_settings(
     BACHS_WEBHOOK_SECRET="whsec_test_only",

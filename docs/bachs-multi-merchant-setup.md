@@ -42,4 +42,21 @@ Sessions created before this change keep the legacy `ontrac_<tracking id>_<rando
 
 Deploy the frontend build that contains the `/checkout/return/:returnToken` route **before** the backend build that starts emitting these URLs.
 
+### Per-account return domain
+
+An account may set an optional `frontend_url`; it overrides `BACHS_FRONTEND_URL` for that account's `success_url` and `cancel_url` only. The payment domain does not need to run the app: have it 302 `/checkout/return/<token>` (with the query string) to `https://ontracourier.us/checkout/return/<token>`. Customers still land on the OnTrac checkout, and Bachs only sees the payment domain.
+
+```json
+"payments": {
+  "label": "OnTrac payments domain",
+  "api_key": "<api-key>",
+  "webhook_secret": "<webhook-secret>",
+  "api_base_url": "https://api.bachs.io",
+  "include_metadata": false,
+  "frontend_url": "https://pay.your-domain.com"
+}
+```
+
+Use the same value in the Bachs dashboard as the account's website/return host where that field is requested, and register that account's webhook at the endpoint you control.
+
 The customer-facing checkout route and USD conversion remain unchanged. Payment confirmation requires a valid signed webhook and the locally stored payment attempt or the legacy metadata path. Metadata omission should only be enabled for an account after confirming the Bachs API supports it and verifying that the event still provides a reliable reference/checkout ID for reconcilation.
