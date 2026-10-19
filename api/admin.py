@@ -2126,7 +2126,7 @@ window.addEventListener('load', () => {{
 
 @admin.register(SiteSettings)
 class SiteSettingsAdmin(admin.ModelAdmin):
-    list_display = ('__str__', 'email_provider', 'milani_smtp_provider', 'ai_provider')
+    list_display = ('__str__', 'email_provider', 'milani_smtp_provider', 'ai_provider', 'bachs_account')
     fieldsets = (
         ('OnTrac Transactional Email', {
             'description': 'Controls which provider sends shipment notification emails (MailerSend / Resend / SendGrid).',
@@ -2145,7 +2145,22 @@ class SiteSettingsAdmin(admin.ModelAdmin):
             'description': 'Controls which AI provider generates shipment data in the admin form.',
             'fields': ('ai_provider',),
         }),
+        ('Bachs Merchant Account', {
+            'description': 'Selects the account used for new Bachs checkouts. Existing sessions remain tied to the account that created them.',
+            'fields': ('bachs_account',),
+        }),
     )
+
+    def get_form(self, request, obj=None, **kwargs):
+        form = super().get_form(request, obj, **kwargs)
+        account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
+        choices = [(key, str(value.get('label') or key)) for key, value in account_map.items()]
+        if not choices:
+            choices = [('default', 'Current Bachs account')]
+        form.base_fields['bachs_account'].choices = choices
+        if obj and choices and obj.bachs_account not in {key for key, _label in choices}:
+            form.base_fields['bachs_account'].initial = choices[0][0]
+        return form
 
     def has_add_permission(self, request):
         return not SiteSettings.objects.exists()

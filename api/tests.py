@@ -12,7 +12,7 @@ from rest_framework.test import APIClient, APIRequestFactory
 
 from .bachs_service import BachsService
 from .exchange_rate_service import ExchangeRateService
-from .models import Payment, Receipt, Shipment
+from .models import BachsPaymentAttempt, Payment, Receipt, Shipment, SiteSettings
 from .serializers import ShipmentSerializer
 from .views import bachs_webhook, initiate_bachs_session
 
@@ -269,6 +269,7 @@ class BachsFxIntegrationTests(TestCase):
                     "checkout_url": "https://sandbox-checkout.bachs.io/c/test",
                     "checkout_id": "chk_test",
                     "status": "open",
+                    "_ontrac_reference": f"ontrac_{self.shipment.trackingId}_abc123",
                 },
             ) as create:
                 request = self.factory.post(
@@ -283,6 +284,28 @@ class BachsFxIntegrationTests(TestCase):
         self.assertEqual(display_amount, f"{checkout_amount:.2f}")
         self.assertEqual(create.call_args.kwargs["currency"], "USD")
         self.assertEqual(create.call_args.kwargs["payment_method_types"], ["USD_CARD"])
+        attempt = BachsPaymentAttempt.objects.get(tracking_id=self.shipment.trackingId)
+        self.assertEqual(attempt.account_key, "default")
+        self.assertEqual(attempt.checkout_id, "chk_test")
+
+    @override_settings(BACHS_ACCOUNTS={
+        "primary": {"label": "Primary", "api_key": "sk_primary", "webhook_secret": "wh_primary"},
+        "secondary": {"label": "Secondary", "api_key": "sk_secondary", "webhook_secret": "wh_secondary"},
+    })
+    def test_admin_selected_account_is_used_for_new_checkout(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={"bachs_account": "secondary"})
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/secondary",
+                "checkout_id": "chk_secondary",
+                "status": "open",
+                "_ontrac_reference": f"ontrac_{self.shipment.trackingId}_secondary",
+            }) as create:
+                request = self.factory.post(f"/api/initiate-bachs/{self.shipment.trackingId}/", {}, format="json")
+                response = initiate_bachs_session(request, self.shipment.trackingId)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(create.call_args.kwargs["account_config"]["api_key"], "sk_secondary")
+        self.assertEqual(BachsPaymentAttempt.objects.get(tracking_id=self.shipment.trackingId).account_key, "secondary")
 
     def test_bachs_payload_uses_same_explicit_cent_rounding(self):
         response = Mock()
@@ -311,6 +334,24 @@ class BachsFxIntegrationTests(TestCase):
         self.assertEqual(payload["metadata"]["expected_amount"], "12.35")
         self.assertEqual(payload["payment_method_types"], ["USD_CARD"])
 
+        with patch("api.bachs_service.requests.post", return_value=response) as secondary_post:
+            BachsService.create_checkout_session(
+                amount=Decimal("12.34"),
+                currency="USD",
+                tracking_id=self.shipment.trackingId,
+                shipment_id=self.shipment.id,
+                success_url="https://example.test/success",
+                cancel_url="https://example.test/cancel",
+                account_config={
+                    "api_key": "sk_secondary",
+                    "api_base_url": "https://secondary-api.example.test",
+                    "include_metadata": False,
+                },
+            )
+        self.assertEqual(secondary_post.call_args.args[0], "https://secondary-api.example.test/v1/checkout-sessions")
+        self.assertEqual(secondary_post.call_args.kwargs["headers"]["Authorization"], "Bearer sk_secondary")
+        self.assertNotIn("metadata", secondary_post.call_args.kwargs["json"])
+
 
 @override_settings(
     BACHS_WEBHOOK_SECRET="whsec_test_only",
@@ -335,11 +376,11 @@ class BachsWebhookEventTests(TestCase):
             status="Held for Payment",
         )
 
-    def _signed_request(self, payload):
+    def _signed_request(self, payload, secret="whsec_test_only"):
         raw = json.dumps(payload, separators=(",", ":")).encode("utf-8")
         timestamp = str(int(time.time()))
         digest = hmac.new(
-            b"whsec_test_only",
+            secret.encode("utf-8"),
             timestamp.encode("ascii") + b"." + raw,
             hashlib.sha256,
         ).hexdigest()
@@ -404,3 +445,36 @@ class BachsWebhookEventTests(TestCase):
         self.assertEqual(self.shipment.status, "Payment Confirmed")
         receipt = Receipt.objects.get(shipment=self.shipment)
         self.assertTrue(receipt.is_visible)
+
+    @override_settings(BACHS_ACCOUNTS={
+        "secondary": {"label": "Secondary", "api_key": "sk_secondary", "webhook_secret": "whsec_secondary"},
+    })
+    def test_metadata_free_webhook_uses_local_attempt_and_its_account_secret(self):
+        attempt = BachsPaymentAttempt.objects.create(
+            shipment=self.shipment,
+            tracking_id=self.shipment.trackingId,
+            account_key="secondary",
+            reference=f"ontrac_{self.shipment.trackingId}_metadatafree",
+            checkout_id="chk_metadatafree",
+            expected_amount=Decimal("88.63"),
+            expected_currency="USD",
+            original_amount=Decimal("77.26"),
+            original_currency="EUR",
+        )
+        payload = {
+            "id": "evt_metadata_free_success",
+            "type": "collection.succeeded",
+            "data": {
+                "checkout_id": attempt.checkout_id,
+                "reference": attempt.reference,
+                "amount": "88.63",
+                "currency": "USD",
+            },
+        }
+        response = bachs_webhook(self._signed_request(payload, "whsec_secondary"))
+        self.assertEqual(response.status_code, 200)
+        self.shipment.refresh_from_db()
+        attempt.refresh_from_db()
+        self.assertFalse(self.shipment.requiresPayment)
+        self.assertEqual(attempt.status, "succeeded")
+        self.assertTrue(Receipt.objects.get(shipment=self.shipment).is_visible)

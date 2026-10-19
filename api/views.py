@@ -15,7 +15,7 @@ import pusher
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
 from django.views.decorators.csrf import csrf_exempt
-from .models import SiteSettings
+from .models import SiteSettings, BachsPaymentAttempt
 from .ai_shipment_generator import (
     generate_shipment_data,
     advance_shipment_stage,
@@ -849,6 +849,12 @@ def initiate_bachs_session(request, tracking_id):
             )
 
         frontend_url = settings.BACHS_FRONTEND_URL.rstrip('/')
+        site_settings, _ = SiteSettings.objects.get_or_create(pk=1)
+        account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
+        account_key = site_settings.bachs_account
+        if account_key not in account_map:
+            account_key = next(iter(account_map), 'default')
+        account_config = account_map.get(account_key) or {}
         session = BachsService.create_checkout_session(
             amount=checkout_amount,
             currency='USD',
@@ -862,6 +868,22 @@ def initiate_bachs_session(request, tracking_id):
             payment_method_types=['USD_CARD'],
             original_amount=shipment.paymentAmount,
             original_currency=shipment.paymentCurrency,
+            account_config=account_config,
+        )
+
+        reference = str(session.get('reference') or session.get('_ontrac_reference') or '')
+        if not reference:
+            raise RuntimeError('Bachs checkout response did not include a reconciliation reference')
+        BachsPaymentAttempt.objects.create(
+            shipment=shipment,
+            tracking_id=shipment.trackingId,
+            account_key=account_key,
+            reference=reference,
+            checkout_id=session.get('checkout_id') or None,
+            expected_amount=Decimal(str(checkout_amount)).quantize(Decimal('0.01')),
+            expected_currency='USD',
+            original_amount=shipment.paymentAmount,
+            original_currency=shipment.paymentCurrency.upper(),
         )
 
         return Response({
@@ -887,20 +909,38 @@ def bachs_webhook(request):
     """Verify and process Bachs collection.succeeded events."""
     raw_body = request.body
     signature = request.headers.get('X-Bachs-Signature-V2', '')
-    secret = settings.BACHS_WEBHOOK_SECRET
 
-    if not secret:
-        logger.error("Bachs webhook received but BACHS_WEBHOOK_SECRET is not configured")
-        return JsonResponse({'error': 'Webhook not configured'}, status=503)
-
-    if not BachsService.verify_webhook_signature_v2(signature, raw_body, secret):
-        logger.warning("Rejected Bachs webhook with invalid signature")
-        return JsonResponse({'error': 'Invalid signature'}, status=401)
-
+    # Parse only to choose the candidate verification secret. No event data is trusted
+    # or acted on until its signature has been verified.
     try:
         event = json.loads(raw_body.decode('utf-8'))
     except (UnicodeDecodeError, json.JSONDecodeError):
         return JsonResponse({'error': 'Invalid JSON'}, status=400)
+
+    candidate_data = event.get('data') or {}
+    candidate_reference = str(candidate_data.get('reference') or '')
+    candidate_checkout_id = str(candidate_data.get('checkout_id') or '')
+    attempt = None
+    if candidate_reference:
+        attempt = BachsPaymentAttempt.objects.filter(reference=candidate_reference).first()
+    if attempt is None and candidate_checkout_id:
+        attempt = BachsPaymentAttempt.objects.filter(checkout_id=candidate_checkout_id).first()
+
+    account_map = getattr(settings, 'BACHS_ACCOUNTS', {}) or {}
+    if attempt:
+        account_config = account_map.get(attempt.account_key) or {}
+        secret = account_config.get('webhook_secret') or ''
+    else:
+        # Backwards compatibility for sessions created before local attempts were stored.
+        secret = settings.BACHS_WEBHOOK_SECRET
+
+    if not secret:
+        logger.error('Bachs webhook received but the matching webhook secret is not configured')
+        return JsonResponse({'error': 'Webhook not configured'}, status=503)
+
+    if not BachsService.verify_webhook_signature_v2(signature, raw_body, secret):
+        logger.warning('Rejected Bachs webhook with invalid signature')
+        return JsonResponse({'error': 'Invalid signature'}, status=401)
 
     event_id = event.get('id')
     cache_key = f"bachs_webhook_{event_id}" if event_id else None
@@ -922,9 +962,11 @@ def bachs_webhook(request):
 
     data = event.get('data') or {}
     metadata = data.get('metadata') or {}
-    tracking_id = metadata.get('tracking_id')
+    tracking_id = (attempt.tracking_id if attempt else None) or metadata.get('tracking_id')
     if not tracking_id:
-        logger.warning(f"Ignoring Bachs {event_type} event without OnTrac tracking metadata")
+        logger.warning(f"Ignoring Bachs {event_type} event without a matching local payment attempt or tracking metadata")
+        return JsonResponse({'status': 'ignored'}, status=200)
+    if attempt and data.get('reference') and str(data.get('reference')) != attempt.reference:
         return JsonResponse({'status': 'ignored'}, status=200)
 
     try:
@@ -946,6 +988,11 @@ def bachs_webhook(request):
     expected_currency = str(metadata.get('expected_currency') or '').upper()
     original_amount = metadata.get('original_amount', expected_amount)
     original_currency = str(metadata.get('original_currency') or expected_currency).upper()
+    if attempt:
+        expected_amount = str(attempt.expected_amount)
+        expected_currency = attempt.expected_currency.upper()
+        original_amount = str(attempt.original_amount)
+        original_currency = attempt.original_currency.upper()
 
     if original_amount:
         try:
@@ -960,6 +1007,14 @@ def bachs_webhook(request):
         return JsonResponse({'status': 'ignored'}, status=200)
 
     if event_type != 'collection.succeeded':
+        if attempt:
+            attempt.status = {
+                'collection.failed': 'failed',
+                'collection.underpaid': 'underpaid',
+                'checkout.expired': 'expired',
+            }.get(event_type, attempt.status)
+            attempt.last_event_id = str(event.get('id') or '')
+            attempt.save(update_fields=['status', 'last_event_id', 'updated_at'])
         if event_type == 'collection.underpaid':
             logger.warning(
                 f"Bachs underpaid collection for {tracking_id}; "
@@ -1009,6 +1064,10 @@ def bachs_webhook(request):
     shipment.status = 'Payment Confirmed'
     shipment.requiresPayment = False
     shipment.save(update_fields=['status', 'requiresPayment'])
+    if attempt:
+        attempt.status = 'succeeded'
+        attempt.last_event_id = str(event.get('id') or '')
+        attempt.save(update_fields=['status', 'last_event_id', 'updated_at'])
 
     receipt, receipt_created = Receipt.objects.get_or_create(shipment=shipment)
     if not receipt.is_visible:

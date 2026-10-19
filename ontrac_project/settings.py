@@ -1,6 +1,7 @@
 # ontrac_project/settings.py
 
 from pathlib import Path
+import json
 import os
 import environ
 from supabase import create_client, Client
@@ -247,6 +248,26 @@ BACHS_API_KEY = env('BACHS_API_KEY', default='')
 BACHS_API_BASE_URL = env('BACHS_API_BASE_URL', default='https://sandbox-api.bachs.io')
 BACHS_WEBHOOK_SECRET = env('BACHS_WEBHOOK_SECRET', default='')
 BACHS_FRONTEND_URL = env('BACHS_FRONTEND_URL', default='http://localhost:5173')
+
+# Optional named merchant accounts. Keep API keys and webhook secrets in Railway
+# environment variables; SiteSettings stores only the selected account key.
+try:
+    BACHS_ACCOUNTS = json.loads(env('BACHS_ACCOUNTS_JSON', default='{}'))
+except (TypeError, ValueError):
+    BACHS_ACCOUNTS = {}
+if not isinstance(BACHS_ACCOUNTS, dict):
+    BACHS_ACCOUNTS = {}
+BACHS_ACCOUNTS = {
+    str(key): value for key, value in BACHS_ACCOUNTS.items()
+    if isinstance(key, str) and key and isinstance(value, dict)
+}
+if BACHS_API_KEY or not BACHS_ACCOUNTS:
+    BACHS_ACCOUNTS.setdefault('default', {
+        'label': 'Current Bachs account',
+        'api_key': BACHS_API_KEY,
+        'webhook_secret': BACHS_WEBHOOK_SECRET,
+        'api_base_url': BACHS_API_BASE_URL,
+    })
 
 #EVENT AUTO LOCATION
 GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')

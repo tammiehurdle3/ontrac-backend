@@ -29,10 +29,16 @@ class BachsService:
         payment_method_types=None,
         original_amount=None,
         original_currency=None,
+        account_config=None,
     ):
-        api_key = settings.BACHS_API_KEY
+        account_config = account_config or {
+            'api_key': settings.BACHS_API_KEY,
+            'api_base_url': settings.BACHS_API_BASE_URL,
+        }
+        api_key = account_config.get('api_key')
+        api_base_url = account_config.get('api_base_url') or settings.BACHS_API_BASE_URL
         if not api_key:
-            raise RuntimeError("BACHS_API_KEY is not configured")
+            raise RuntimeError("The selected Bachs account has no API key configured")
         reference = f"ontrac_{tracking_id}_{uuid.uuid4().hex[:12]}"
         checkout_amount = Decimal(str(amount)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         payload = {
@@ -43,7 +49,10 @@ class BachsService:
             "success_url": success_url,
             "cancel_url": cancel_url,
             "reference": reference,
-            "metadata": {
+            "expires_in_minutes": 60,
+        }
+        if account_config.get('include_metadata', True):
+            payload['metadata'] = {
                 "tracking_id": tracking_id,
                 "shipment_id": str(shipment_id),
                 "expected_amount": f"{checkout_amount:.2f}",
@@ -51,9 +60,7 @@ class BachsService:
                 "original_amount": f"{Decimal(original_amount if original_amount is not None else amount):.2f}",
                 "original_currency": (original_currency or currency).upper(),
                 "payment_description": payment_description or "Payment",
-            },
-            "expires_in_minutes": 60,
-        }
+            }
 
         if payment_method_types:
             payload["payment_method_types"] = list(payment_method_types)
@@ -64,7 +71,7 @@ class BachsService:
                 payload["customer"]["name"] = customer_name
 
         response = requests.post(
-            f"{settings.BACHS_API_BASE_URL.rstrip('/')}/v1/checkout-sessions",
+            f"{api_base_url.rstrip('/')}/v1/checkout-sessions",
             headers={
                 "Authorization": f"Bearer {api_key}",
                 "Content-Type": "application/json",
@@ -85,6 +92,7 @@ class BachsService:
         if not data.get("checkout_url"):
             raise RuntimeError("Bachs did not return a checkout URL")
 
+        data.setdefault('_ontrac_reference', reference)
         return data
 
     @staticmethod

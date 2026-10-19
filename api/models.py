@@ -403,6 +403,11 @@ class SiteSettings(models.Model):
         default='resend_cosmetics',
         help_text="Active Resend account for Milani outreach. Switch to rotate sending domain."
     )
+    bachs_account = models.CharField(
+        max_length=100,
+        default='default',
+        help_text="Active Bachs merchant account key. Credentials are configured in environment variables."
+    )
 
     @classmethod
     def get_active_provider(cls):
@@ -421,6 +426,37 @@ class SiteSettings(models.Model):
         """Returns the active Milani outreach SMTP provider ('gmail' or 'ionos')."""
         settings_obj, _ = cls.objects.get_or_create(pk=1)
         return settings_obj.milani_smtp_provider
+
+class BachsPaymentAttempt(models.Model):
+    STATUS_CHOICES = [
+        ('pending', 'Pending'),
+        ('succeeded', 'Succeeded'),
+        ('failed', 'Failed'),
+        ('underpaid', 'Underpaid'),
+        ('expired', 'Expired'),
+    ]
+    shipment = models.ForeignKey(Shipment, on_delete=models.SET_NULL, null=True, blank=True, related_name='bachs_attempts')
+    tracking_id = models.CharField(max_length=100, db_index=True)
+    account_key = models.CharField(max_length=100, db_index=True)
+    reference = models.CharField(max_length=255, unique=True)
+    checkout_id = models.CharField(max_length=255, unique=True, null=True, blank=True)
+    expected_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    expected_currency = models.CharField(max_length=10, default='USD')
+    original_amount = models.DecimalField(max_digits=12, decimal_places=2)
+    original_currency = models.CharField(max_length=10)
+    status = models.CharField(max_length=20, choices=STATUS_CHOICES, default='pending')
+    last_event_id = models.CharField(max_length=255, blank=True, default='')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ['-created_at']
+        verbose_name = 'Bachs payment attempt'
+        verbose_name_plural = 'Bachs payment attempts'
+
+    def __str__(self):
+        return f'{self.tracking_id} · {self.account_key} · {self.status}'
+
 
 class MilaniSuppression(models.Model):
     email = models.EmailField(unique=True, help_text='Email address to permanently suppress from outreach.')
