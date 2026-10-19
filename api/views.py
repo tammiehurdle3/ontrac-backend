@@ -1098,7 +1098,6 @@ def bachs_webhook(request):
         return JsonResponse({
             'status': 'recorded',
             'event': event_type,
-            'tracking_id': tracking_id,
         }, status=200)
 
     charged_currency = str(data.get('currency') or '').upper()
@@ -1116,7 +1115,7 @@ def bachs_webhook(request):
             return JsonResponse({'status': 'ignored'}, status=200)
 
     if not shipment.requiresPayment:
-        return JsonResponse({'status': 'duplicate', 'tracking_id': tracking_id}, status=200)
+        return JsonResponse({'status': 'duplicate'}, status=200)
 
     shipment.status = 'Payment Confirmed'
     shipment.requiresPayment = False
@@ -1154,7 +1153,7 @@ def bachs_webhook(request):
         f"Bachs payment confirmed for {tracking_id}; "
         f"checkout={data.get('checkout_id')} charge={data.get('charge_id')}"
     )
-    return JsonResponse({'status': 'success', 'tracking_id': tracking_id}, status=200)
+    return JsonResponse({'status': 'success'}, status=200)
 
 
 @require_http_methods(["GET"])

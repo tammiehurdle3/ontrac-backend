@@ -66,6 +66,9 @@ ALLOWED_HOSTS = [
     'a69b-136-144-33-243.ngrok-free.app',
 ]
 
+# Extra hosts, e.g. a payment/webhook domain, without a code change per domain.
+ALLOWED_HOSTS += env.list('EXTRA_ALLOWED_HOSTS', default=[])
+
 # ... (The rest of your settings file remains exactly the same) ...
 INSTALLED_APPS = [
     'django.contrib.admin',
