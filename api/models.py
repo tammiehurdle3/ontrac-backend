@@ -475,6 +475,14 @@ class BachsMerchantAccount(models.Model):
         blank=True,
         help_text='Optional return domain used for this account. Blank uses BACHS_FRONTEND_URL.',
     )
+    webhook_host = models.CharField(
+        max_length=253,
+        blank=True,
+        help_text=(
+            'Hostname Bachs posts this account webhooks to, e.g. hooks.milani-cosmetics.com. '
+            'No scheme or path; its DNS record must point at this backend.'
+        ),
+    )
     include_metadata = models.BooleanField(
         default=False,
         help_text='Send tracking metadata to Bachs. Keep off to keep tracking IDs out of Bachs.',

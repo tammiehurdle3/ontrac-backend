@@ -809,3 +809,37 @@ class BachsAdminManagedAccountTests(TestCase):
 
         self.assertFalse(form.is_valid())
         self.assertIn("BACHS_CREDENTIALS_KEY", str(form.errors))
+
+
+class BachsWebhookHostTests(TestCase):
+    def setUp(self):
+        BachsMerchantAccount.objects.create(
+            key="hooks_account",
+            label="Hooks account",
+            webhook_host="hooks.example.test",
+        )
+
+    def test_merchant_webhook_host_is_accepted(self):
+        response = self.client.post(
+            "/api/webhooks/bachs/",
+            data="{}",
+            content_type="application/json",
+            HTTP_HOST="hooks.example.test",
+        )
+
+        self.assertIn(response.status_code, (401, 503))
+
+    def test_unknown_webhook_host_is_rejected(self):
+        response = self.client.post(
+            "/api/webhooks/bachs/",
+            data="{}",
+            content_type="application/json",
+            HTTP_HOST="not-a-merchant.example.test",
+        )
+
+        self.assertEqual(response.status_code, 400)
+
+    def test_merchant_host_does_not_unlock_other_paths(self):
+        response = self.client.get("/api/shipments/", HTTP_HOST="hooks.example.test")
+
+        self.assertEqual(response.status_code, 400)

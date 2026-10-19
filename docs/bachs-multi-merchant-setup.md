@@ -1,5 +1,7 @@
 # Bachs multi-merchant setup
 
+See the [operator guide](bachs-operator-guide.md) for the full flow, checklists and troubleshooting.
+
 The selected merchant account is stored in **Django Admin → Site Settings → Bachs Merchant Account**. Only the account key is stored in the database; API keys and webhook secrets belong in Railway environment variables.
 
 ## Configure accounts

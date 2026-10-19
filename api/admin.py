@@ -2139,7 +2139,7 @@ class BachsMerchantAccountForm(forms.ModelForm):
 
     class Meta:
         model = BachsMerchantAccount
-        fields = ('key', 'label', 'api_base_url', 'frontend_url', 'include_metadata', 'is_active')
+        fields = ('key', 'label', 'api_base_url', 'frontend_url', 'webhook_host', 'include_metadata', 'is_active')
 
     def clean(self):
         cleaned = super().clean()
@@ -2167,7 +2167,7 @@ class BachsMerchantAccountForm(forms.ModelForm):
 class BachsMerchantAccountAdmin(admin.ModelAdmin):
     form = BachsMerchantAccountForm
     list_display = (
-        'label', 'key', 'api_base_url', 'frontend_url',
+        'label', 'key', 'api_base_url', 'frontend_url', 'webhook_host',
         'include_metadata', 'is_active', 'has_api_key', 'has_webhook_secret',
     )
     list_filter = ('is_active', 'include_metadata')
@@ -2183,8 +2183,11 @@ class BachsMerchantAccountAdmin(admin.ModelAdmin):
             'description': 'Credentials are encrypted with BACHS_CREDENTIALS_KEY before they are stored.',
         }),
         ('Webhook', {
-            'fields': ('webhook_secret',),
-            'description': 'Must match the webhook secret configured for this account in Bachs.',
+            'fields': ('webhook_host', 'webhook_secret'),
+            'description': (
+                'Register webhook_host in the Bachs dashboard as '
+                'https://<webhook_host>/api/webhooks/bachs/. The secret must match that account.'
+            ),
         }),
         ('Checkout', {
             'fields': ('frontend_url', 'include_metadata'),
