@@ -483,6 +483,14 @@ class BachsMerchantAccount(models.Model):
             'No scheme or path; its DNS record must point at this backend.'
         ),
     )
+    return_domain = models.CharField(
+        max_length=253,
+        blank=True,
+        help_text=(
+            'Payment/return hostname Bachs sees, e.g. pay.milani-cosmetics.com. '
+            'No scheme or path. Blank uses BACHS_RETURN_REDIRECT_BASE or the frontend route.'
+        ),
+    )
     include_metadata = models.BooleanField(
         default=False,
         help_text='Send tracking metadata to Bachs. Keep off to keep tracking IDs out of Bachs.',
@@ -526,6 +534,8 @@ class BachsMerchantAccount(models.Model):
             'webhook_secret': self.get_webhook_secret(),
             'api_base_url': self.api_base_url,
             'frontend_url': self.frontend_url,
+            'webhook_host': self.webhook_host,
+            'return_domain': self.return_domain,
             'include_metadata': self.include_metadata,
         }
 

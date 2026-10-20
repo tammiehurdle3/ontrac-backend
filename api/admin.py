@@ -2139,7 +2139,7 @@ class BachsMerchantAccountForm(forms.ModelForm):
 
     class Meta:
         model = BachsMerchantAccount
-        fields = ('key', 'label', 'api_base_url', 'frontend_url', 'webhook_host', 'include_metadata', 'is_active')
+        fields = ('key', 'label', 'api_base_url', 'frontend_url', 'webhook_host', 'return_domain', 'include_metadata', 'is_active')
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -2192,7 +2192,7 @@ class BachsMerchantAccountForm(forms.ModelForm):
 class BachsMerchantAccountAdmin(admin.ModelAdmin):
     form = BachsMerchantAccountForm
     list_display = (
-        'label', 'key', 'api_base_url', 'frontend_url', 'webhook_host',
+        'label', 'key', 'api_base_url', 'frontend_url', 'webhook_host', 'return_domain',
         'include_metadata', 'is_active', 'has_api_key', 'has_webhook_secret',
     )
     list_filter = ('is_active', 'include_metadata')
@@ -2215,8 +2215,11 @@ class BachsMerchantAccountAdmin(admin.ModelAdmin):
             ),
         }),
         ('Checkout', {
-            'fields': ('frontend_url', 'include_metadata'),
-            'description': 'Leave the return domain blank to use BACHS_FRONTEND_URL.',
+            'fields': ('frontend_url', 'return_domain', 'include_metadata'),
+            'description': (
+                'frontend_url is the customer-facing checkout domain. return_domain is the '
+                'payment host Bachs sees in success/cancel URLs; it redirects to frontend_url.'
+            ),
         }),
         ('Timestamps', {'fields': ('created_at', 'updated_at')}),
     )

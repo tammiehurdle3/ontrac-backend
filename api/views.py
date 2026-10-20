@@ -908,7 +908,13 @@ def initiate_bachs_session(request, tracking_id):
             original_currency=shipment.paymentCurrency.upper(),
         )
         return_token = _bachs_return_token(attempt.pk)
-        redirect_base = str(getattr(settings, 'BACHS_RETURN_REDIRECT_BASE', '') or '').rstrip('/')
+        redirect_base = str(
+            account_config.get('return_domain')
+            or getattr(settings, 'BACHS_RETURN_REDIRECT_BASE', '')
+            or ''
+        ).rstrip('/')
+        if redirect_base and '://' not in redirect_base:
+            redirect_base = f'https://{redirect_base}'
         if settings.BACHS_OMIT_RETURN_URLS:
             success_url = None
             cancel_url = None

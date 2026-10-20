@@ -371,6 +371,31 @@ class BachsFxIntegrationTests(TestCase):
         )
         self.assertIn("outcome=success", create.call_args.kwargs["success_url"])
 
+    @override_settings(BACHS_ACCOUNTS={
+        "milani": {
+            "label": "Milani",
+            "api_key": "sk_milani",
+            "webhook_secret": "whsec_milani",
+            "return_domain": "pay.example.test",
+        },
+    })
+    def test_account_return_domain_drives_the_payment_url(self):
+        SiteSettings.objects.update_or_create(pk=1, defaults={"bachs_account": "milani"})
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/milani",
+                "checkout_id": "chk_milani_return",
+                "status": "open",
+            }) as create:
+                response = initiate_bachs_session(self.factory.post("/"), self.shipment.trackingId)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            create.call_args.kwargs["success_url"].startswith(
+                "https://pay.example.test/api/bachs/return/"
+            )
+        )
+
     def test_return_go_redirects_to_frontend_checkout(self):
         attempt = BachsPaymentAttempt.objects.create(
             shipment=self.shipment,
