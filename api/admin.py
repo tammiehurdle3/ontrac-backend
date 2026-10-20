@@ -2144,10 +2144,27 @@ class BachsMerchantAccountForm(forms.ModelForm):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.fields['frontend_url'].label = 'Return domain (frontend URL)'
+        self.fields['frontend_url'].help_text = (
+            'Where Bachs sends the customer after payment, usually the OnTrac site, '
+            'e.g. https://ontracourier.us. Leave blank to use BACHS_FRONTEND_URL.'
+        )
         self.fields['webhook_host'].label = 'Webhook host'
-        if not self.instance.pk:
-            self.fields['api_key'].help_text = 'Required for a new account.'
-            self.fields['webhook_secret'].help_text = 'Required for a new account.'
+        self.fields['webhook_host'].help_text = (
+            'Hostname only, e.g. hooks.milani-cosmetics.com. It must point at this backend. '
+            'Bachs posts to https://<host>/api/webhooks/bachs/.'
+        )
+        self.fields['api_key'].label = 'API key'
+        self.fields['webhook_secret'].label = 'Webhook signing secret'
+        if self.instance.pk:
+            self.fields['api_key'].help_text = 'Leave blank to keep the stored key.'
+            self.fields['webhook_secret'].help_text = 'Leave blank to keep the stored secret.'
+        else:
+            self.fields['api_key'].help_text = (
+                'Required. Copy it from the Bachs dashboard for this account.'
+            )
+            self.fields['webhook_secret'].help_text = (
+                'Required. Copy the webhook signing secret from the Bachs dashboard for this account.'
+            )
 
     def clean(self):
         cleaned = super().clean()
