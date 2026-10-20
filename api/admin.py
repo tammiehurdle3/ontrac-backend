@@ -2141,6 +2141,14 @@ class BachsMerchantAccountForm(forms.ModelForm):
         model = BachsMerchantAccount
         fields = ('key', 'label', 'api_base_url', 'frontend_url', 'webhook_host', 'include_metadata', 'is_active')
 
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.fields['frontend_url'].label = 'Return domain (frontend URL)'
+        self.fields['webhook_host'].label = 'Webhook host'
+        if not self.instance.pk:
+            self.fields['api_key'].help_text = 'Required for a new account.'
+            self.fields['webhook_secret'].help_text = 'Required for a new account.'
+
     def clean(self):
         cleaned = super().clean()
         new_secret = bool(cleaned.get('api_key') or cleaned.get('webhook_secret'))
