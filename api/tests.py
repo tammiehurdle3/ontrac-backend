@@ -353,6 +353,44 @@ class BachsFxIntegrationTests(TestCase):
         self.assertEqual(secondary_post.call_args.kwargs["headers"]["Authorization"], "Bearer sk_secondary")
         self.assertNotIn("metadata", secondary_post.call_args.kwargs["json"])
 
+    def test_checkout_session_can_omit_return_urls(self):
+        response = Mock()
+        response.ok = True
+        response.json.return_value = {
+            "checkout_url": "https://sandbox-checkout.bachs.io/c/test",
+            "checkout_id": "chk_no_redirects",
+            "status": "open",
+        }
+
+        with patch("api.bachs_service.requests.post", return_value=response) as post:
+            BachsService.create_checkout_session(
+                amount=Decimal("5.00"),
+                currency="USD",
+                tracking_id=self.shipment.trackingId,
+                shipment_id=self.shipment.id,
+                payment_method_types=["USD_CARD"],
+                original_amount=self.shipment.paymentAmount,
+                original_currency=self.shipment.paymentCurrency,
+            )
+
+        payload = post.call_args.kwargs["json"]
+        self.assertNotIn("success_url", payload)
+        self.assertNotIn("cancel_url", payload)
+
+    @override_settings(BACHS_OMIT_RETURN_URLS=True)
+    def test_initiate_omits_return_urls_when_configured(self):
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/local",
+                "checkout_id": "chk_omit_urls",
+                "status": "open",
+            }) as create:
+                response = initiate_bachs_session(self.factory.post("/"), self.shipment.trackingId)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertIsNone(create.call_args.kwargs["success_url"])
+        self.assertIsNone(create.call_args.kwargs["cancel_url"])
+
     def test_reference_sent_to_bachs_never_contains_the_tracking_id(self):
         response = Mock()
         response.ok = True

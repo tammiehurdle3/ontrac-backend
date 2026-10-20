@@ -21,8 +21,8 @@ class BachsService:
         currency,
         tracking_id,
         shipment_id,
-        success_url,
-        cancel_url,
+        success_url=None,
+        cancel_url=None,
         customer_email=None,
         customer_name=None,
         payment_description=None,
@@ -51,11 +51,15 @@ class BachsService:
                 "currency": currency.upper(),
                 "amount": f"{checkout_amount:.2f}",
             },
-            "success_url": success_url,
-            "cancel_url": cancel_url,
             "reference": reference,
             "expires_in_minutes": 60,
         }
+        # Bachs rejects redirects that are not publicly reachable, so local
+        # testing omits them and the customer returns to the site manually.
+        if success_url:
+            payload["success_url"] = success_url
+        if cancel_url:
+            payload["cancel_url"] = cancel_url
         if account_config.get('include_metadata', True):
             payload['metadata'] = {
                 "tracking_id": tracking_id,

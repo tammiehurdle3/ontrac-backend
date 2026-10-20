@@ -257,6 +257,9 @@ BACHS_FRONTEND_URL = env('BACHS_FRONTEND_URL', default='http://localhost:5173')
 # cryptography.fernet.Fernet.generate_key() and keep it in Railway only.
 BACHS_CREDENTIALS_KEY = env('BACHS_CREDENTIALS_KEY', default='')
 
+# Local testing only: omit success/cancel URLs (Bachs rejects non-public ones).
+BACHS_OMIT_RETURN_URLS = env.bool('BACHS_OMIT_RETURN_URLS', default=False)
+
 # Optional named merchant accounts. Keep API keys and webhook secrets in Railway
 # environment variables; SiteSettings stores only the selected account key.
 try:

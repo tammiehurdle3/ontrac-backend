@@ -907,6 +907,12 @@ def initiate_bachs_session(request, tracking_id):
             original_currency=shipment.paymentCurrency.upper(),
         )
         return_token = _bachs_return_token(attempt.pk)
+        if settings.BACHS_OMIT_RETURN_URLS:
+            success_url = None
+            cancel_url = None
+        else:
+            success_url = f"{frontend_url}/checkout/return/{return_token}?bachs_return=success"
+            cancel_url = f"{frontend_url}/checkout/return/{return_token}?bachs_return=cancelled"
 
         try:
             session = BachsService.create_checkout_session(
@@ -914,8 +920,8 @@ def initiate_bachs_session(request, tracking_id):
                 currency='USD',
                 tracking_id=shipment.trackingId,
                 shipment_id=shipment.id,
-                success_url=f"{frontend_url}/checkout/return/{return_token}?bachs_return=success",
-                cancel_url=f"{frontend_url}/checkout/return/{return_token}?bachs_return=cancelled",
+                success_url=success_url,
+                cancel_url=cancel_url,
                 customer_email=shipment.recipient_email,
                 customer_name=shipment.recipient_name,
                 payment_description=shipment.paymentDescription,

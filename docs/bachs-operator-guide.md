@@ -59,8 +59,12 @@ they were created with, so switching does not break in-flight payments.
 
 ## Testing
 
-- **Local**: `ENVIRONMENT=local`, return domain `http://localhost:5173`, and a
-  tunnel (ngrok) for the webhook. Set `EXTRA_ALLOWED_HOSTS` to the tunnel host.
+- **Local**: Bachs rejects non-public return URLs, so set
+  `BACHS_OMIT_RETURN_URLS=1` and forward events with the Bachs CLI
+  (`bachs listen --forward-to http://localhost:8000/api/webhooks/bachs`).
+  The CLI prints a session signing secret; use it as the merchant webhook
+  secret. No tunnel and no dashboard endpoint are needed. Return to the
+  checkout page manually after paying.
 - **Sandbox**: API base `https://sandbox-api.bachs.io`, sandbox test card.
 - **Pass criteria**: attempt `succeeded`, webhook `200`, shipment
   `Payment Confirmed`, receipt visible, no tracking ID in anything Bachs saw.
