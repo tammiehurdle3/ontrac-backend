@@ -353,6 +353,44 @@ class BachsFxIntegrationTests(TestCase):
         self.assertEqual(secondary_post.call_args.kwargs["headers"]["Authorization"], "Bearer sk_secondary")
         self.assertNotIn("metadata", secondary_post.call_args.kwargs["json"])
 
+    @override_settings(BACHS_RETURN_REDIRECT_BASE="https://pay.example.test")
+    def test_initiate_uses_redirect_base_for_return_urls(self):
+        with patch.object(ExchangeRateService, "get_usd_rate", return_value=Decimal("1.10")):
+            with patch.object(BachsService, "create_checkout_session", return_value={
+                "checkout_url": "https://checkout.example.test/c/redirect",
+                "checkout_id": "chk_redirect_base",
+                "status": "open",
+            }) as create:
+                response = initiate_bachs_session(self.factory.post("/"), self.shipment.trackingId)
+
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(
+            create.call_args.kwargs["success_url"].startswith(
+                "https://pay.example.test/api/bachs/return/"
+            )
+        )
+        self.assertIn("outcome=success", create.call_args.kwargs["success_url"])
+
+    def test_return_go_redirects_to_frontend_checkout(self):
+        attempt = BachsPaymentAttempt.objects.create(
+            shipment=self.shipment,
+            tracking_id=self.shipment.trackingId,
+            account_key="default",
+            reference="ontrac_redirect_go_reference",
+            checkout_id="chk_redirect_go",
+            expected_amount=Decimal("88.63"),
+            expected_currency="USD",
+            original_amount=Decimal("77.26"),
+            original_currency="EUR",
+        )
+        token = _bachs_return_token(attempt.pk)
+
+        response = self.client.get(f"/api/bachs/return/{token}/go/?outcome=success")
+
+        self.assertEqual(response.status_code, 302)
+        self.assertIn(f"/checkout/{self.shipment.trackingId}", response["Location"])
+        self.assertIn("bachs_return=success", response["Location"])
+
     def test_checkout_session_can_omit_return_urls(self):
         response = Mock()
         response.ok = True

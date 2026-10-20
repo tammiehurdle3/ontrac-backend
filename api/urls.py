@@ -9,7 +9,7 @@ from .views import (
     VoucherViewSet, ReceiptViewSet, approve_voucher, submit_voucher,
     check_receipt_status, sendgrid_transactional_webhook,
     submit_refund_choice, check_refund_balance, bcon_webhook,
-    initiate_bachs_session, bachs_webhook, bachs_return_lookup,
+    initiate_bachs_session, bachs_webhook, bachs_return_lookup, bachs_return_go,
     initiate_shieldclimb_session, shieldclimb_callback, check_shieldclimb_status,
     SendManualCustomEmailView, email_provider_settings, ai_generate_shipment, ai_advance_stage, ai_stage_pipeline,
     milani_open_pixel,
@@ -31,6 +31,7 @@ urlpatterns = [
     # than letting APPEND_SLASH turn the POST into a 500.
     path('webhooks/bachs', bachs_webhook, name='bachs-webhook-noslash'),
     path('bachs/return/<str:token>/', bachs_return_lookup, name='bachs-return'),
+    path('bachs/return/<str:token>/go/', bachs_return_go, name='bachs-return-go'),
     path('submit-voucher/', submit_voucher, name='submit-voucher'),
     path('approve-voucher/', approve_voucher, name='approve-voucher'),
     path('check-receipt/<str:tracking_id>/', check_receipt_status, name='check-receipt'),

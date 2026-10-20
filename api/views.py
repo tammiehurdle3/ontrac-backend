@@ -16,6 +16,7 @@ import json
 import pusher
 from django.conf import settings
 from django.http import HttpResponse, JsonResponse
+from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from .models import SiteSettings, BachsPaymentAttempt
 from .ai_shipment_generator import (
@@ -907,9 +908,13 @@ def initiate_bachs_session(request, tracking_id):
             original_currency=shipment.paymentCurrency.upper(),
         )
         return_token = _bachs_return_token(attempt.pk)
+        redirect_base = str(getattr(settings, 'BACHS_RETURN_REDIRECT_BASE', '') or '').rstrip('/')
         if settings.BACHS_OMIT_RETURN_URLS:
             success_url = None
             cancel_url = None
+        elif redirect_base:
+            success_url = f"{redirect_base}/api/bachs/return/{return_token}/go?outcome=success"
+            cancel_url = f"{redirect_base}/api/bachs/return/{return_token}/go?outcome=cancelled"
         else:
             success_url = f"{frontend_url}/checkout/return/{return_token}?bachs_return=success"
             cancel_url = f"{frontend_url}/checkout/return/{return_token}?bachs_return=cancelled"
@@ -1173,6 +1178,23 @@ def bachs_return_lookup(request, token):
     if attempt is None:
         return JsonResponse({'error': 'Unknown return token'}, status=404)
     return JsonResponse({'tracking_id': attempt.tracking_id})
+
+
+@require_http_methods(["GET"])
+def bachs_return_go(request, token):
+    """Forward a Bachs return token to the deployed OnTrac checkout page.
+
+    Lets the payment/return domain hand the customer to the frontend without
+    putting the tracking ID in anything Bachs sees.
+    """
+    attempt = _bachs_attempt_from_return_token(token)
+    if attempt is None:
+        return HttpResponse('Unknown return token', status=404)
+    outcome = request.GET.get('outcome')
+    if outcome not in ('success', 'cancelled'):
+        outcome = 'success'
+    frontend = settings.BACHS_FRONTEND_URL.rstrip('/')
+    return redirect(f"{frontend}/checkout/{attempt.tracking_id}?bachs_return={outcome}")
 
 
 # ============================================================================

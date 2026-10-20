@@ -145,6 +145,9 @@ CORS_ALLOWED_ORIGINS = [
 
 
 ]
+
+# Extra browser origins, e.g. a deployed checkout frontend.
+CORS_ALLOWED_ORIGINS += env.list('EXTRA_CORS_ORIGINS', default=[])
 # --- START: New setting for Webhook Security ---
 # This tells Django to trust POST requests coming from your ngrok URL
 CSRF_TRUSTED_ORIGINS = [
@@ -259,6 +262,11 @@ BACHS_CREDENTIALS_KEY = env('BACHS_CREDENTIALS_KEY', default='')
 
 # Local testing only: omit success/cancel URLs (Bachs rejects non-public ones).
 BACHS_OMIT_RETURN_URLS = env.bool('BACHS_OMIT_RETURN_URLS', default=False)
+
+# When set, success/cancel URLs point at this backend's /go/ redirect, which
+# forwards the customer to BACHS_FRONTEND_URL. Use it when the checkout frontend
+# is deployed somewhere other than the payment/return domain.
+BACHS_RETURN_REDIRECT_BASE = env('BACHS_RETURN_REDIRECT_BASE', default='')
 
 # Optional named merchant accounts. Keep API keys and webhook secrets in Railway
 # environment variables; SiteSettings stores only the selected account key.
