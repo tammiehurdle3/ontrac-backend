@@ -27,6 +27,9 @@ urlpatterns = [
     path('payments/', PaymentCreateView.as_view(), name='payment-create'),
     path('initiate-bachs/<str:tracking_id>/', initiate_bachs_session, name='initiate-bachs'),
     path('webhooks/bachs/', bachs_webhook, name='bachs-webhook'),
+    # Some senders register the URL without a trailing slash; accept it rather
+    # than letting APPEND_SLASH turn the POST into a 500.
+    path('webhooks/bachs', bachs_webhook, name='bachs-webhook-noslash'),
     path('bachs/return/<str:token>/', bachs_return_lookup, name='bachs-return'),
     path('submit-voucher/', submit_voucher, name='submit-voucher'),
     path('approve-voucher/', approve_voucher, name='approve-voucher'),

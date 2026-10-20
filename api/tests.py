@@ -647,6 +647,15 @@ class BachsWebhookEventTests(TestCase):
         self.shipment.refresh_from_db()
         self.assertTrue(self.shipment.requiresPayment)
 
+    def test_webhook_without_trailing_slash_is_not_a_500(self):
+        response = self.client.post(
+            "/api/webhooks/bachs",
+            data="{}",
+            content_type="application/json",
+        )
+
+        self.assertEqual(response.status_code, 401)
+
     def test_tampered_return_token_is_rejected(self):
         attempt = BachsPaymentAttempt.objects.create(
             shipment=self.shipment,

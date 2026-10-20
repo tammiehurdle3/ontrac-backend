@@ -13,13 +13,13 @@ class BachsWebhookHostMiddleware:
     goes through Django's normal host validation.
     """
 
-    WEBHOOK_PATH = '/api/webhooks/bachs/'
+    WEBHOOK_PATHS = ('/api/webhooks/bachs/', '/api/webhooks/bachs')
 
     def __init__(self, get_response):
         self.get_response = get_response
 
     def __call__(self, request):
-        if request.path == self.WEBHOOK_PATH:
+        if request.path in self.WEBHOOK_PATHS:
             raw_host = request.META.get('HTTP_HOST', '')
             hostname = self._hostname(raw_host)
             if hostname and not self._is_allowed(hostname) and self._is_merchant_host(hostname):
